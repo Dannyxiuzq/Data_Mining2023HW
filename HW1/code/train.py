@@ -144,7 +144,7 @@ print(dataset[2])
 # train_dataset, val_dataset = train_test_split(dataset, test_size=0, train_size=5000)
 train_dataset, val_dataset, _ = random_split(dataset=dataset, lengths=[5000, 1000, 40])#[9664, 2416])
 # train_dataset, val_dataset = random_split(dataset=dataset, lengths=[9664, 2416])  # 训练集和验证集划分 4:1
-batch_size = 1
+batch_size = 16
 train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)  # dataloader batch_size设置的小是因为显存不够
 val_dataloader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
@@ -179,9 +179,10 @@ for i in range(10):
 
         # total_loss = (loss_img(logits_per_image, ground_truth) + loss_txt(logits_per_text, ground_truth)) / 2
         loss = InfoNCE(logits_per_good_image, logits_per_bad_image, logits_per_prompt_for_good)
-        epoch_loss += loss.item()
+        epoch_loss += loss.sum().item()
+        scalar_loss = loss.mean()
         optimizer.zero_grad()
-        loss.backward()
+        scalar_loss.backward()
         if device == "cpu":
             optimizer.step()
         else:
