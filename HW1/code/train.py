@@ -11,7 +11,7 @@ import torch.nn.functional as F
 
 """加载clip模型"""
 device = "cuda" if torch.cuda.is_available() else "cpu"
-learning_rate = 5e-5
+learning_rate = 1e-3
 model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
 if device == "cpu":
     model.float()
@@ -19,7 +19,7 @@ else:
     clip.model.convert_weights(model)
 
 """读取数据集路径"""
-train_data_root = r'Project_Dataset/Selected_Train_Dataset/'
+train_data_root = r'D:\DataMine\Data_Mining2023\HW1\Project_Dataset\Selected_Train_Dataset/'
 path_list = os.listdir(train_data_root)
 # all_good_images_path = []
 # all_bad_images_path = []
@@ -46,7 +46,8 @@ def get_txt_path(img_path):
 def convert_models_to_fp32(model):
     for p in model.parameters():
         p.data = p.data.float()
-        p.grad.data = p.grad.data.float()
+        if p.grad is not None:
+            p.grad.data = p.grad.data.float()
 
 # class train_data(Dataset):
 #     def __init__(self, lable, img_path_list):
@@ -79,16 +80,18 @@ def convert_models_to_fp32(model):
 #         # txt = "a " + self.label + " photo of " + prompt
 #         return img, txt, self.label, prompt
 
-class Net(nn.Module):
-    def __init__(self, clip) -> None:
+class Projection(nn.Module):
+    def __init__(self, num_hidden=512) -> None:
         super().__init__(clip)
-        self.clip = clip
-        # self.projection = nn.Linear()
-    
-    def forward(self, img, tokens):
-        logits_img, logits_prompt = self.clip(img, tokens)
-        
+        self.linear1 = nn.Linear(num_hidden, num_hidden)
+        self.linear2 = nn.Linear(num_hidden, num_hidden)
+        self.activation = F.relu
 
+    def forward(self, embedding):
+        return self.linear2(self.activation(self.linear1(embedding)))
+
+def norm(vec: torch.Tensor):
+    return vec / vec.norm(dim=1, keepdim=True)
 
 class train_data(Dataset):
     def __init__(self, train_data_root):
@@ -155,9 +158,12 @@ print(dataset[2])
 # train_dataset, val_dataset = train_test_split(dataset, test_size=0, train_size=5000)
 train_dataset, val_dataset, _ = random_split(dataset=dataset, lengths=[5000, 1000, 40])#[9664, 2416])
 # train_dataset, val_dataset = random_split(dataset=dataset, lengths=[9664, 2416])  # 训练集和验证集划分 4:1
-batch_size = 1
+batch_size = 16
 train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)  # dataloader batch_size设置的小是因为显存不够
 val_dataloader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+
+proj = Projection().to(device)
+
 
 # Loss: InfoNCE
 def InfoNCE(pos_logits, neg_logits, anchor_logits, tau: float = 0.8):
@@ -167,8 +173,7 @@ def InfoNCE(pos_logits, neg_logits, anchor_logits, tau: float = 0.8):
 # loss_img = nn.CrossEntropyLoss().to(device)
 # loss_txt = nn.CrossEntropyLoss().to(device)
 
-def norm(vec: torch.Tensor):
-    return vec / vec.norm(dim=1, keepdim=True)
+
 
 
 optimizer = optim.Adam(model.parameters(), lr=learning_rate, betas=(0.9, 0.98), eps=1e-6, weight_decay=0.2)
@@ -181,9 +186,9 @@ for i in range(10):
         prompt_tokens = clip.tokenize(prompt).to(device)
         good_imgs = good_img.to(device)
         bad_imgs = bad_img.to(device)
-        good_imgs_features = model.encode_image(good_imgs.half())
-        bad_imgs_features = model.encode_image(bad_imgs.half())
-        text_features = model.encode_text(prompt_tokens)
+        good_imgs_features = proj(norm(model.encode_image(good_imgs)))
+        bad_imgs_features = proj(norm(model.encode_image(bad_imgs)))
+        text_features = proj(norm(model.encode_text(prompt_tokens)))
 
         # total_loss = (loss_img(logits_per_image, ground_truth) + loss_txt(logits_per_text, ground_truth)) / 2
         loss = InfoNCE(good_imgs_features, bad_imgs_features, text_features)
@@ -202,19 +207,18 @@ for i in range(10):
     """验证过程"""
     with torch.no_grad():
         cor = 0
-        for batch, (good_img, bad_img, prompt, raw_prompt, _, _) in enumerate(train_dataloader):
+        for batch, (good_img, bad_img, prompt, raw_prompt, _, _) in enumerate(val_dataloader):
             
             prompt_tokens = clip.tokenize(prompt).to(device)
             good_imgs = good_img.to(device)
             bad_imgs = bad_img.to(device)
-            good_imgs_features = model.encode_image(good_imgs.half())
-            bad_imgs_features = model.encode_image(bad_imgs.half())
-            text_features = model.encode_text(prompt_tokens)
+            good_imgs_features = proj(norm(model.encode_image(good_imgs)))
+            bad_imgs_features = proj(norm(model.encode_image(bad_imgs)))
+            text_features = proj(norm(model.encode_text(prompt_tokens)))
             
-            if F.cosine_similarity(good_imgs_features, text_features) >= F.cosine_similarity(bad_imgs_features, text_features):
-                cor += 1
-            else:
-                print("%s's prompt is wrong" % (raw_prompt))
+            cor += (F.cosine_similarity(good_imgs_features, text_features) >= F.cosine_similarity(bad_imgs_features, text_features)).sum().item()
+            #else:
+                #print("%s's prompt is wrong" % str(raw_prompt))
             # if device == "cpu":
             #     ground_truth = torch.arange(1).long().to(device)
             # else:
