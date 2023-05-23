@@ -9,6 +9,8 @@ from PIL import Image
 from sklearn.model_selection import train_test_split
 import torch.nn.functional as F
 
+
+
 """加载clip模型"""
 device = "cuda" if torch.cuda.is_available() else "cpu"
 learning_rate = 5e-5
@@ -206,10 +208,10 @@ for i in range(10):
             bad_imgs = bad_img.to(device)
             logits_per_bad_image, logits_per_prompt_for_bad = model(bad_imgs, prompt_tokens)
             
-            if F.cosine_similarity(logits_per_good_image, logits_per_prompt_for_good) >= F.cosine_similarity(logits_per_bad_image, logits_per_prompt_for_bad):
+            if torch.mean(F.cosine_similarity(logits_per_good_image, logits_per_prompt_for_good)) >= torch.mean(F.cosine_similarity(logits_per_bad_image, logits_per_prompt_for_bad)):
                 cor += 1
             else:
-                print("%s's prompt is wrong" % (raw_prompt))
+                print("%s's prompt is wrong" % str(raw_prompt))
             # if device == "cpu":
             #     ground_truth = torch.arange(1).long().to(device)
             # else:
@@ -224,7 +226,12 @@ for i in range(10):
             #     print(txt, probs)
         print(cor, '/', val_dataset.__len__(), ' = ', cor / val_dataset.__len__())
 
-    torch.save(model, 'model/model1-%s.pkl' % str(i))
+    #import os
+
+    #if not os.path.exists('model'):
+       # os.makedirs('model')
+        if(i%40==0):
+            torch.save(model, 'model/model1-%s.pkl' % str(i))
 
 
 
