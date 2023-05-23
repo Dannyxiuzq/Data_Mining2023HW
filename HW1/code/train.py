@@ -169,7 +169,7 @@ proj = Projection().to(device)
 def InfoNCE(pos_logits, neg_logits, anchor_logits, tau: float = 0.8):
     pos_pair = torch.exp(F.cosine_similarity(pos_logits, anchor_logits, dim=-1) / tau)
     neg_pair = torch.exp(F.cosine_similarity(neg_logits, anchor_logits, dim=-1) / tau)
-    return -torch.mean(torch.log(pos_pair / (pos_pair + neg_pair)))
+    return -torch.mean(torch.log(pos_pair / (pos_pair + neg_pair)))#todo:报错可能
 # loss_img = nn.CrossEntropyLoss().to(device)
 # loss_txt = nn.CrossEntropyLoss().to(device)
 
