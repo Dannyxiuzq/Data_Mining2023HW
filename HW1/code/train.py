@@ -79,6 +79,17 @@ def convert_models_to_fp32(model):
 #         # txt = "a " + self.label + " photo of " + prompt
 #         return img, txt, self.label, prompt
 
+class Net(nn.Module):
+    def __init__(self, clip) -> None:
+        super().__init__(clip)
+        self.clip = clip
+        # self.projection = nn.Linear()
+    
+    def forward(self, img, tokens):
+        logits_img, logits_prompt = self.clip(img, tokens)
+        
+
+
 class train_data(Dataset):
     def __init__(self, train_data_root):
         path_list = os.listdir(train_data_root)
