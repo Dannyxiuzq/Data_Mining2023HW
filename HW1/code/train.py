@@ -163,11 +163,12 @@ val_dataloader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=
 def InfoNCE(pos_logits, neg_logits, anchor_logits, tau: float = 0.8):
     pos_pair = torch.exp(F.cosine_similarity(pos_logits, anchor_logits, dim=-1) / tau)
     neg_pair = torch.exp(F.cosine_similarity(neg_logits, anchor_logits, dim=-1) / tau)
-    return -torch.log(pos_pair / (pos_pair + neg_pair))
+    return -torch.mean(torch.log(pos_pair / (pos_pair + neg_pair)))
 # loss_img = nn.CrossEntropyLoss().to(device)
 # loss_txt = nn.CrossEntropyLoss().to(device)
 
-
+def norm(vec: torch.Tensor):
+    return vec / vec.norm(dim=1, keepdim=True)
 
 
 optimizer = optim.Adam(model.parameters(), lr=learning_rate, betas=(0.9, 0.98), eps=1e-6, weight_decay=0.2)
@@ -179,17 +180,13 @@ for i in range(10):
         print('.', end='')
         prompt_tokens = clip.tokenize(prompt).to(device)
         good_imgs = good_img.to(device)
-        logits_per_good_image, logits_per_prompt_for_good = model(good_imgs, prompt_tokens)
         bad_imgs = bad_img.to(device)
-        logits_per_bad_image, logits_per_prompt_for_bad = model(bad_imgs, prompt_tokens)
-
-        # if device == "cpu":
-        #     ground_truth = torch.arange(1).long().to(device)
-        # else:
-        #     ground_truth = torch.arange(1, dtype=torch.long, device=device)
+        good_imgs_features = model.encode_image(good_imgs.half())
+        bad_imgs_features = model.encode_image(bad_imgs.half())
+        text_features = model.encode_text(prompt_tokens)
 
         # total_loss = (loss_img(logits_per_image, ground_truth) + loss_txt(logits_per_text, ground_truth)) / 2
-        loss = InfoNCE(logits_per_good_image, logits_per_bad_image, logits_per_prompt_for_good)
+        loss = InfoNCE(good_imgs_features, bad_imgs_features, text_features)
         epoch_loss += loss.item()
         optimizer.zero_grad()
         loss.backward()
@@ -206,17 +203,15 @@ for i in range(10):
     with torch.no_grad():
         cor = 0
         for batch, (good_img, bad_img, prompt, raw_prompt, _, _) in enumerate(train_dataloader):
-            # text = clip.tokenize(["a good photo of " + prompt[0], "a bad photo of " + prompt[0]]).to(device)
-            # text = clip.tokenize([prompt[0], "other things"]).to(device)
-            # text = clip.tokenize(["a photo of " + prompt[0], "a photo without " + prompt[0]]).to(device)
-            # text = clip.tokenize(["a good photo of " + prompt[0] + "without other things", "a mess photo of " + prompt[0] + "with other things"]).to(device)
+            
             prompt_tokens = clip.tokenize(prompt).to(device)
             good_imgs = good_img.to(device)
-            logits_per_good_image, logits_per_prompt_for_good = model(good_imgs, prompt_tokens)
             bad_imgs = bad_img.to(device)
-            logits_per_bad_image, logits_per_prompt_for_bad = model(bad_imgs, prompt_tokens)
+            good_imgs_features = model.encode_image(good_imgs.half())
+            bad_imgs_features = model.encode_image(bad_imgs.half())
+            text_features = model.encode_text(prompt_tokens)
             
-            if F.cosine_similarity(logits_per_good_image, logits_per_prompt_for_good) >= F.cosine_similarity(logits_per_bad_image, logits_per_prompt_for_bad):
+            if F.cosine_similarity(good_imgs_features, text_features) >= F.cosine_similarity(bad_imgs_features, text_features):
                 cor += 1
             else:
                 print("%s's prompt is wrong" % (raw_prompt))
