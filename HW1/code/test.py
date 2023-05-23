@@ -38,12 +38,12 @@ class test_data(Dataset):
         return len(self.path)
 
     def __getitem__(self, item):
-        img = Image.open(self.path[item])
-        img = preprocess(img)
+        raw_img = Image.open(self.path[item])
+        img = preprocess(raw_img)
         txt = get_txt_path(self.path[item]) + 'prompt.txt'
         file = open(txt, encoding='utf-8')
         prompt = file.read(300)
-        return img, prompt
+        return img, prompt, raw_img
 
 image1_dataset = test_data(all_image1_path)
 image2_dataset = test_data(all_image2_path)

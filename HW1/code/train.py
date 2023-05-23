@@ -9,8 +9,6 @@ from PIL import Image
 from sklearn.model_selection import train_test_split
 import torch.nn.functional as F
 
-
-
 """加载clip模型"""
 device = "cuda" if torch.cuda.is_available() else "cpu"
 learning_rate = 5e-5
@@ -125,14 +123,14 @@ class train_data(Dataset):
         """  
         # return self.good_imgs[item], self.bad_imgs[item], self.prompts[item]
         good_img_path = self.good_imgs_path[item]
-        good_img = Image.open(good_img_path)
-        good_img = preprocess(good_img)
+        raw_good_img = Image.open(good_img_path)
+        good_img = preprocess(raw_good_img)
         
         bad_img_path = self.bad_imgs_path[item]
-        bad_img = Image.open(bad_img_path)
-        bad_img = preprocess(bad_img)
+        raw_bad_img = Image.open(bad_img_path)
+        bad_img = preprocess(raw_bad_img)
 
-        return good_img, bad_img, self.prompts[item], self.raw_prompts[item]
+        return good_img, bad_img, self.prompts[item], self.raw_prompts[item], raw_good_img, raw_bad_img
 
 
 
@@ -146,7 +144,7 @@ print(dataset[2])
 # train_dataset, val_dataset = train_test_split(dataset, test_size=0, train_size=5000)
 train_dataset, val_dataset, _ = random_split(dataset=dataset, lengths=[5000, 1000, 40])#[9664, 2416])
 # train_dataset, val_dataset = random_split(dataset=dataset, lengths=[9664, 2416])  # 训练集和验证集划分 4:1
-batch_size = 16
+batch_size = 1
 train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)  # dataloader batch_size设置的小是因为显存不够
 val_dataloader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
@@ -166,7 +164,7 @@ optimizer = optim.Adam(model.parameters(), lr=learning_rate, betas=(0.9, 0.98), 
 for i in range(10):
     epoch_loss = 0
     """训练过程"""
-    for batch, (good_img, bad_img, prompt, _) in enumerate(train_dataloader):
+    for batch, (good_img, bad_img, prompt, _, _, _) in enumerate(train_dataloader):
         print('.', end='')
         prompt_tokens = clip.tokenize(prompt).to(device)
         good_imgs = good_img.to(device)
@@ -181,10 +179,9 @@ for i in range(10):
 
         # total_loss = (loss_img(logits_per_image, ground_truth) + loss_txt(logits_per_text, ground_truth)) / 2
         loss = InfoNCE(logits_per_good_image, logits_per_bad_image, logits_per_prompt_for_good)
-        epoch_loss += loss.sum().item()
-        scalar_loss = loss.mean()
+        epoch_loss += loss.item()
         optimizer.zero_grad()
-        scalar_loss.backward()
+        loss.backward()
         if device == "cpu":
             optimizer.step()
         else:
@@ -197,7 +194,7 @@ for i in range(10):
     """验证过程"""
     with torch.no_grad():
         cor = 0
-        for batch, (good_img, bad_img, prompt, raw_prompt) in enumerate(train_dataloader):
+        for batch, (good_img, bad_img, prompt, raw_prompt, _, _) in enumerate(train_dataloader):
             # text = clip.tokenize(["a good photo of " + prompt[0], "a bad photo of " + prompt[0]]).to(device)
             # text = clip.tokenize([prompt[0], "other things"]).to(device)
             # text = clip.tokenize(["a photo of " + prompt[0], "a photo without " + prompt[0]]).to(device)
@@ -208,10 +205,10 @@ for i in range(10):
             bad_imgs = bad_img.to(device)
             logits_per_bad_image, logits_per_prompt_for_bad = model(bad_imgs, prompt_tokens)
             
-            if torch.mean(F.cosine_similarity(logits_per_good_image, logits_per_prompt_for_good)) >= torch.mean(F.cosine_similarity(logits_per_bad_image, logits_per_prompt_for_bad)):
+            if F.cosine_similarity(logits_per_good_image, logits_per_prompt_for_good) >= F.cosine_similarity(logits_per_bad_image, logits_per_prompt_for_bad):
                 cor += 1
             else:
-                print("%s's prompt is wrong" % str(raw_prompt))
+                print("%s's prompt is wrong" % (raw_prompt))
             # if device == "cpu":
             #     ground_truth = torch.arange(1).long().to(device)
             # else:
@@ -226,12 +223,7 @@ for i in range(10):
             #     print(txt, probs)
         print(cor, '/', val_dataset.__len__(), ' = ', cor / val_dataset.__len__())
 
-    #import os
-
-    #if not os.path.exists('model'):
-       # os.makedirs('model')
-        if(i%40==0):
-            torch.save(model, 'model/model1-%s.pkl' % str(i))
+    torch.save(model, 'model/model1-%s.pkl' % str(i))
 
 
 
