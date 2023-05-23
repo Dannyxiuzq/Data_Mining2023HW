@@ -19,7 +19,7 @@ else:
     clip.model.convert_weights(model)
 
 """读取数据集路径"""
-train_data_root = r'Project_Dataset/Selected_Train_Dataset/'
+train_data_root = r'D:\DataMine\Data_Mining2023\HW1\Project_Dataset\Selected_Train_Dataset/'
 path_list = os.listdir(train_data_root)
 # all_good_images_path = []
 # all_bad_images_path = []
@@ -46,7 +46,8 @@ def get_txt_path(img_path):
 def convert_models_to_fp32(model):
     for p in model.parameters():
         p.data = p.data.float()
-        p.grad.data = p.grad.data.float()
+        if p.grad is not None:
+            p.grad.data = p.grad.data.float()
 
 # class train_data(Dataset):
 #     def __init__(self, lable, img_path_list):
@@ -155,7 +156,7 @@ print(dataset[2])
 # train_dataset, val_dataset = train_test_split(dataset, test_size=0, train_size=5000)
 train_dataset, val_dataset, _ = random_split(dataset=dataset, lengths=[5000, 1000, 40])#[9664, 2416])
 # train_dataset, val_dataset = random_split(dataset=dataset, lengths=[9664, 2416])  # 训练集和验证集划分 4:1
-batch_size = 1
+batch_size = 16
 train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)  # dataloader batch_size设置的小是因为显存不够
 val_dataloader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
@@ -181,8 +182,8 @@ for i in range(10):
         prompt_tokens = clip.tokenize(prompt).to(device)
         good_imgs = good_img.to(device)
         bad_imgs = bad_img.to(device)
-        good_imgs_features = model.encode_image(good_imgs.half())
-        bad_imgs_features = model.encode_image(bad_imgs.half())
+        good_imgs_features = model.encode_image(good_imgs)
+        bad_imgs_features = model.encode_image(bad_imgs)
         text_features = model.encode_text(prompt_tokens)
 
         # total_loss = (loss_img(logits_per_image, ground_truth) + loss_txt(logits_per_text, ground_truth)) / 2
@@ -207,11 +208,11 @@ for i in range(10):
             prompt_tokens = clip.tokenize(prompt).to(device)
             good_imgs = good_img.to(device)
             bad_imgs = bad_img.to(device)
-            good_imgs_features = model.encode_image(good_imgs.half())
-            bad_imgs_features = model.encode_image(bad_imgs.half())
+            good_imgs_features = model.encode_image(good_imgs)
+            bad_imgs_features = model.encode_image(bad_imgs)
             text_features = model.encode_text(prompt_tokens)
             
-            if F.cosine_similarity(good_imgs_features, text_features) >= F.cosine_similarity(bad_imgs_features, text_features):
+            if torch.mean(F.cosine_similarity(good_imgs_features, text_features)) >= torch.mean(F.cosine_similarity(bad_imgs_features, text_features)):
                 cor += 1
             else:
                 print("%s's prompt is wrong" % (raw_prompt))
