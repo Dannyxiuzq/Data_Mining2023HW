@@ -141,7 +141,7 @@ class train_data(Dataset):
         raw_bad_img = Image.open(bad_img_path)
         bad_img = preprocess(raw_bad_img)
 
-        return good_img, bad_img, self.prompts[item], self.raw_prompts[item], raw_good_img, raw_bad_img
+        return good_img, bad_img, self.prompts[item], self.raw_prompts[item], good_img_path, bad_img_path
 
 
 
