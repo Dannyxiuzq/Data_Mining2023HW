@@ -11,7 +11,7 @@ import torch.nn.functional as F
 
 """加载clip模型"""
 device = "cuda" if torch.cuda.is_available() else "cpu"
-learning_rate = 5e-5
+learning_rate = 1e-3
 model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
 if device == "cpu":
     model.float()
@@ -203,7 +203,7 @@ for i in range(10):
     """验证过程"""
     with torch.no_grad():
         cor = 0
-        for batch, (good_img, bad_img, prompt, raw_prompt, _, _) in enumerate(train_dataloader):
+        for batch, (good_img, bad_img, prompt, raw_prompt, _, _) in enumerate(val_dataloader):
             
             prompt_tokens = clip.tokenize(prompt).to(device)
             good_imgs = good_img.to(device)
@@ -212,10 +212,9 @@ for i in range(10):
             bad_imgs_features = model.encode_image(bad_imgs)
             text_features = model.encode_text(prompt_tokens)
             
-            if torch.mean(F.cosine_similarity(good_imgs_features, text_features)) >= torch.mean(F.cosine_similarity(bad_imgs_features, text_features)):
-                cor += 1
-            else:
-                print("%s's prompt is wrong" % (raw_prompt))
+            cor += (F.cosine_similarity(good_imgs_features, text_features) >= F.cosine_similarity(bad_imgs_features, text_features)).sum().item()
+            #else:
+                #print("%s's prompt is wrong" % str(raw_prompt))
             # if device == "cpu":
             #     ground_truth = torch.arange(1).long().to(device)
             # else:
