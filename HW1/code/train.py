@@ -82,9 +82,9 @@ def convert_models_to_fp32(model):
 
 class Projection(nn.Module):
     def __init__(self, num_hidden=512) -> None:
-        super().__init__(clip)
-        self.linear1 = nn.Linear(num_hidden, num_hidden)
-        self.linear2 = nn.Linear(num_hidden, num_hidden)
+        super().__init__()
+        self.linear1 = nn.Linear(num_hidden, num_hidden, dtype=torch.float16)
+        self.linear2 = nn.Linear(num_hidden, num_hidden, dtype=torch.float16)
         self.activation = F.relu
 
     def forward(self, embedding):
