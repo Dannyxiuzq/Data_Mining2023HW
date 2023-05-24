@@ -80,35 +80,16 @@ def convert_models_to_fp32(model):
 #         # txt = "a " + self.label + " photo of " + prompt
 #         return img, txt, self.label, prompt
 
-class Projection(nn.Module):
-    def __init__(self, num_hidden=512) -> None:
-        super().__init__()
-        self.linear1 = nn.Linear(num_hidden, num_hidden)
-        self.linear2 = nn.Linear(num_hidden, num_hidden)
-        self.activation = F.relu
-
-    def forward(self, embedding):
-        return self.linear2(self.activation(self.linear1(embedding)))
-
-# def norm(vec: torch.Tensor):
-#     return vec / vec.norm(dim=1, keepdim=True)
-
 class Net(nn.Module):
-    def __init__(self, img_encoder, text_encoder) -> None:
-        super().__init__()
-        self.img_encoder = img_encoder
-        self.text_encoder = text_encoder
+    def __init__(self, clip) -> None:
+        super().__init__(clip)
+        self.clip = clip
+        # self.projection = nn.Linear()
     
+    def forward(self, img, tokens):
+        logits_img, logits_prompt = self.clip(img, tokens)
+        
 
-
-    def forward(self, img_1, img_2, prompt):
-        img_1_embedding = self.norm(self.img_encoder(img_1))
-        img_2_embedding = self.norm(self.img_encoder(img_2))
-        prompt_embedding = self.norm(self.text_encoder(prompt))
-        return img_1_embedding, img_2_embedding, prompt_embedding
-
-    def norm(self, vec: torch.Tensor):
-        return vec / vec.norm(dim=1, keepdim=True)
 
 class train_data(Dataset):
     def __init__(self, train_data_root):
@@ -179,23 +160,16 @@ batch_size = 16
 train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)  # dataloader batch_size设置的小是因为显存不够
 val_dataloader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
-net = Net(model.encode_image, model.encode_text).to(device) # 从图片、文本到它们的embedding的网络
-proj = Projection().to(device)  # 用于InfoNCE计算前的embedding的投影函数
-
-
 # Loss: InfoNCE
-def InfoNCE(pos_embeddings, neg_embeddings, anchor_embeddings, proj, tau: float = 0.8):
-    pos_embeddings = proj(pos_embeddings)
-    neg_embeddings = proj(neg_embeddings)
-    anchor_embeddings = proj(anchor_embeddings)
-    pos_pair = torch.exp(F.cosine_similarity(pos_embeddings, anchor_embeddings, dim=-1) / tau)
-    neg_pair = torch.exp(F.cosine_similarity(neg_embeddings, anchor_embeddings, dim=-1) / tau)
+def InfoNCE(pos_logits, neg_logits, anchor_logits, tau: float = 0.8):
+    pos_pair = torch.exp(F.cosine_similarity(pos_logits, anchor_logits, dim=-1) / tau)
+    neg_pair = torch.exp(F.cosine_similarity(neg_logits, anchor_logits, dim=-1) / tau)
     return -torch.mean(torch.log(pos_pair / (pos_pair + neg_pair)))
 # loss_img = nn.CrossEntropyLoss().to(device)
 # loss_txt = nn.CrossEntropyLoss().to(device)
 
-
-
+def norm(vec: torch.Tensor):
+    return vec / vec.norm(dim=1, keepdim=True)
 
 
 optimizer = optim.Adam(model.parameters(), lr=learning_rate, betas=(0.9, 0.98), eps=1e-6, weight_decay=0.2)
@@ -208,7 +182,9 @@ for i in range(10):
         prompt_tokens = clip.tokenize(prompt).to(device)
         good_imgs = good_img.to(device)
         bad_imgs = bad_img.to(device)
-        good_imgs_embedding, bad_imgs_embedding, prompts_embedding = net(good_imgs, bad_imgs, prompt_tokens)
+        good_imgs_features = model.encode_image(good_imgs.half())
+        bad_imgs_features = model.encode_image(bad_imgs.half())
+        text_features = model.encode_text(prompt_tokens)
 
         # total_loss = (loss_img(logits_per_image, ground_truth) + loss_txt(logits_per_text, ground_truth)) / 2
         loss = InfoNCE(good_imgs_embedding, bad_imgs_embedding, prompts_embedding, proj)
@@ -232,11 +208,14 @@ for i in range(10):
             prompt_tokens = clip.tokenize(prompt).to(device)
             good_imgs = good_img.to(device)
             bad_imgs = bad_img.to(device)
-            good_imgs_embedding, bad_imgs_embedding, prompts_embedding = None
+            good_imgs_features = model.encode_image(good_imgs.half())
+            bad_imgs_features = model.encode_image(bad_imgs.half())
+            text_features = model.encode_text(prompt_tokens)
             
-            cor += (F.cosine_similarity(good_imgs_embedding, prompts_embedding) >= F.cosine_similarity(bad_imgs_embedding, prompts_embedding)).sum().item()
-            #else:
-                #print("%s's prompt is wrong" % str(raw_prompt))
+            if F.cosine_similarity(good_imgs_features, text_features) >= F.cosine_similarity(bad_imgs_features, text_features):
+                cor += 1
+            else:
+                print("%s's prompt is wrong" % (raw_prompt))
             # if device == "cpu":
             #     ground_truth = torch.arange(1).long().to(device)
             # else:
