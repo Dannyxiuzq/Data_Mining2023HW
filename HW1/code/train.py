@@ -19,7 +19,7 @@ else:
     clip.model.convert_weights(model)
 
 """读取数据集路径"""
-train_data_root = r'D:\DataMine\Data_Mining2023\HW1\Project_Dataset\Selected_Train_Dataset/'
+train_data_root = r'Project_Dataset\Selected_Train_Dataset/'
 path_list = os.listdir(train_data_root)
 # all_good_images_path = []
 # all_bad_images_path = []
@@ -83,8 +83,8 @@ def convert_models_to_fp32(model):
 class Projection(nn.Module):
     def __init__(self, num_hidden=512) -> None:
         super().__init__()
-        self.linear1 = nn.Linear(num_hidden, num_hidden)
-        self.linear2 = nn.Linear(num_hidden, num_hidden)
+        self.linear1 = nn.Linear(num_hidden, num_hidden, dtype=torch.float16)
+        self.linear2 = nn.Linear(num_hidden, num_hidden, dtype=torch.float16)
         self.activation = F.relu
 
     def forward(self, embedding):
@@ -175,7 +175,7 @@ dataset = train_data(train_data_root)
 # train_dataset, val_dataset = train_test_split(dataset, test_size=0, train_size=5000)
 train_dataset, val_dataset, _ = random_split(dataset=dataset, lengths=[5000, 1000, 40])#[9664, 2416])
 # train_dataset, val_dataset = random_split(dataset=dataset, lengths=[9664, 2416])  # 训练集和验证集划分 4:1
-batch_size = 16
+batch_size = 2
 train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)  # dataloader batch_size设置的小是因为显存不够
 val_dataloader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
