@@ -264,7 +264,7 @@ for i in range(10):
             #     print(txt, probs)
         print(cor, '/', val_dataset.__len__(), ' = ', cor / val_dataset.__len__())
 
-    torch.save(model, 'model/model1-%s.pkl' % str(i))
+    #torch.save(model, 'model/model1-%s.pkl' % str(i))
 
 
 
