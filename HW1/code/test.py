@@ -7,9 +7,9 @@ from PIL import Image
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 _, preprocess = clip.load("ViT-B/32", device=device)
-model = torch.load('model.pkl')
+model = torch.load('D:\DataMine\Data_Mining2023\HW1\code\model\model1-4.pkl')
 
-test_data_root = r'Project_Dataset/Selected_Test_Dataset/'
+test_data_root = r'D:\DataMine\Data_Mining2023\HW1\Project_Dataset\Selected_Test_Dataset'
 path_list = os.listdir(test_data_root)
 all_image1_path = []
 all_image2_path = []
