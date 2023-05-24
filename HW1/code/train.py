@@ -8,6 +8,7 @@ from torch.utils.data import Dataset, DataLoader, random_split
 from PIL import Image
 from sklearn.model_selection import train_test_split
 import torch.nn.functional as F
+from torch.optim import lr_scheduler
 
 """加载clip模型"""
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -200,6 +201,9 @@ def InfoNCE(pos_embeddings, neg_embeddings, anchor_embeddings, proj, tau: float 
 
 optimizer = optim.Adam(model.parameters(), lr=learning_rate, betas=(0.9, 0.98), eps=1e-6, weight_decay=0.2)
 
+# 每个epoch学习率乘以0.5
+scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.5)
+
 for i in range(10):
     epoch_loss = 0
     """训练过程"""
@@ -216,6 +220,7 @@ for i in range(10):
         loss.backward()
         if device == "cpu":
             optimizer.step()
+
         else:
             convert_models_to_fp32(model)
             optimizer.step()
@@ -231,6 +236,9 @@ for i in range(10):
         if epoch_loss / batch_size <= 0.5:
             print("loss is small, flying!")
     """验证过程"""
+    scheduler.step()
+    #print(learning_rate,optimizer.param_groups[0]['lr'])
+
     with torch.no_grad():
         cor = 0
         for batch, (good_img, bad_img, prompt, raw_prompt, _, _) in enumerate(val_dataloader):
