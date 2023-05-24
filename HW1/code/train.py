@@ -209,7 +209,7 @@ for i in range(10):
         bad_imgs = bad_img.to(device)
         good_imgs_embedding, bad_imgs_embedding, prompts_embedding = net(good_imgs, bad_imgs, prompt_tokens)
         # total_loss = (loss_img(logits_per_image, ground_truth) + loss_txt(logits_per_text, ground_truth)) / 2
-        loss = InfoNCE(good_imgs_embedding, bad_imgs_embedding, prompts_embedding, proj)
+        loss = InfoNCE(good_imgs_embedding, bad_imgs_embedding, prompts_embedding, tau=0.4)
         epoch_loss += loss.item()
         optimizer.zero_grad()
         loss.backward()
