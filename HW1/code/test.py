@@ -4,6 +4,10 @@ import clip
 import torch
 from torch.utils.data import Dataset
 from PIL import Image
+from train import Net
+import torch.nn.functional as F 
+import pandas as pd
+
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 _, preprocess = clip.load("ViT-B/32", device=device)
@@ -43,12 +47,47 @@ class test_data(Dataset):
         txt = get_txt_path(self.path[item]) + 'prompt.txt'
         file = open(txt, encoding='utf-8')
         prompt = file.read(300)
-        return img, prompt, raw_img
+
+        # 下面是得到图片的名称
+        name = os.path.basename(self.path[item])
+
+        return img, prompt, raw_img, name
 
 image1_dataset = test_data(all_image1_path)
 image2_dataset = test_data(all_image2_path)
 
 cor = 0
+# with torch.no_grad():
+#     """
+#     测试过程：
+#     取image1和image2的两张对应图片，分别计算[pgood1, pbad1]和[pgood2, pbad2], 如果pgood1 > pgood2 则 image1为good, 反之image2为good
+#     """
+#     for i in range(image1_dataset.__len__()):
+#         img1 = image1_dataset[i][0].unsqueeze(0).to(device)
+#         img2 = image2_dataset[i][0].unsqueeze(0).to(device)
+#         txt = image1_dataset[i][1]
+#         text = clip.tokenize(["a good photo of " + txt, "a bad photo of " + txt]).to(device)
+#         image1_logits_per_image, image1_logits_per_text = model(img1, text)
+#         image1_probs = image1_logits_per_image.softmax(dim=-1).cpu().numpy()
+#         image2_logits_per_image, image2_logits_per_text = model(img2, text)
+#         image2_probs = image2_logits_per_image.softmax(dim=-1).cpu().numpy()
+#         if image1_probs[0][0] > image2_probs[0][0]:
+#             print('y', end='')
+#             cor += 1
+#         else:
+#             print('n', end='')
+
+# print()
+# print(cor, image1_dataset.__len__())
+
+
+# load已经存好的网络
+net = torch.load('moxing')
+# 定义一个保存good和bad的列表
+image_names = []
+image1s = []
+image2s = []
+
 with torch.no_grad():
     """
     测试过程：
@@ -58,16 +97,22 @@ with torch.no_grad():
         img1 = image1_dataset[i][0].unsqueeze(0).to(device)
         img2 = image2_dataset[i][0].unsqueeze(0).to(device)
         txt = image1_dataset[i][1]
-        text = clip.tokenize(["a good photo of " + txt, "a bad photo of " + txt]).to(device)
-        image1_logits_per_image, image1_logits_per_text = model(img1, text)
-        image1_probs = image1_logits_per_image.softmax(dim=-1).cpu().numpy()
-        image2_logits_per_image, image2_logits_per_text = model(img2, text)
-        image2_probs = image2_logits_per_image.softmax(dim=-1).cpu().numpy()
-        if image1_probs[0][0] > image2_probs[0][0]:
-            print('y', end='')
-            cor += 1
-        else:
-            print('n', end='')
+        file_name = image1_dataset[i][3]
+        text = clip.tokenize("A photo of " + txt + '.').to(device)
+        img1_embedding, img2_embedding, prompt_embedding = net(img1, img2, text)
+        img1Better = True if F.cosine_similarity(img1_embedding, prompt_embedding) > F.cosine_similarity(img2_embedding, prompt_embedding) else False
+        
+        image_names.append(file_name)
+        image1s.append('good' if img1Better else 'bad')
+        image2s.append('bad' if img1Better else 'good')
 
-print()
+data = {
+    'image_pair_name': image_names,
+    'image1': image1s,
+    'image2': image2s
+}
+dataframe = pd.DataFrame(data)
+dataframe.to_csv('./test_result.csv', encoding='utf-8')
+
+# print()
 print(cor, image1_dataset.__len__())
