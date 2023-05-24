@@ -11,7 +11,7 @@ import torch.nn.functional as F
 
 """加载clip模型"""
 device = "cuda" if torch.cuda.is_available() else "cpu"
-learning_rate = 1e-3
+learning_rate = 1e-5
 model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
 if device == "cpu":
     model.float()
@@ -19,7 +19,7 @@ else:
     clip.model.convert_weights(model)
 
 """读取数据集路径"""
-train_data_root = r'Project_Dataset\Selected_Train_Dataset/'
+train_data_root = r'D:\DataMine\Data_Mining2023\HW1\Project_Dataset\Selected_Train_Dataset/'
 path_list = os.listdir(train_data_root)
 # all_good_images_path = []
 # all_bad_images_path = []
@@ -175,7 +175,7 @@ dataset = train_data(train_data_root)
 # train_dataset, val_dataset = train_test_split(dataset, test_size=0, train_size=5000)
 train_dataset, val_dataset, _ = random_split(dataset=dataset, lengths=[5000, 1000, 40])#[9664, 2416])
 # train_dataset, val_dataset = random_split(dataset=dataset, lengths=[9664, 2416])  # 训练集和验证集划分 4:1
-batch_size = 2
+batch_size = 16
 train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)  # dataloader batch_size设置的小是因为显存不够
 val_dataloader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
@@ -209,7 +209,6 @@ for i in range(10):
         good_imgs = good_img.to(device)
         bad_imgs = bad_img.to(device)
         good_imgs_embedding, bad_imgs_embedding, prompts_embedding = net(good_imgs, bad_imgs, prompt_tokens)
-
         # total_loss = (loss_img(logits_per_image, ground_truth) + loss_txt(logits_per_text, ground_truth)) / 2
         loss = InfoNCE(good_imgs_embedding, bad_imgs_embedding, prompts_embedding, proj)
         epoch_loss += loss.item()
@@ -222,8 +221,15 @@ for i in range(10):
             optimizer.step()
             clip.model.convert_weights(model)
 
-    print('epoch %d, loss: %.3f' % (i + 1, epoch_loss/batch_size))
-
+    print('epoch %d, loss: %.3f' % (i + 1, epoch_loss))
+    if epoch_loss / batch_size >= 13.8:
+        print("loss is larger than 13.8")
+        if epoch_loss / batch_size >= 100:
+            print("loss is large, flying!")
+    elif epoch_loss / batch_size <= 10:
+        print("loss is smaller than 10")
+        if epoch_loss / batch_size <= 0.5:
+            print("loss is small, flying!")
     """验证过程"""
     with torch.no_grad():
         cor = 0
@@ -232,7 +238,7 @@ for i in range(10):
             prompt_tokens = clip.tokenize(prompt).to(device)
             good_imgs = good_img.to(device)
             bad_imgs = bad_img.to(device)
-            good_imgs_embedding, bad_imgs_embedding, prompts_embedding = None
+            good_imgs_embedding, bad_imgs_embedding, prompts_embedding = net(good_imgs, bad_imgs, prompt_tokens)
             
             cor += (F.cosine_similarity(good_imgs_embedding, prompts_embedding) >= F.cosine_similarity(bad_imgs_embedding, prompts_embedding)).sum().item()
             #else:
