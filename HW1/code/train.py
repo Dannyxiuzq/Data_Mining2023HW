@@ -82,7 +82,7 @@ def convert_models_to_fp32(model):
 
 class Projection(nn.Module):
     def __init__(self, num_hidden=512) -> None:
-        super().__init__(clip)
+        super().__init__()
         self.linear1 = nn.Linear(num_hidden, num_hidden)
         self.linear2 = nn.Linear(num_hidden, num_hidden)
         self.activation = F.relu
@@ -90,8 +90,25 @@ class Projection(nn.Module):
     def forward(self, embedding):
         return self.linear2(self.activation(self.linear1(embedding)))
 
-def norm(vec: torch.Tensor):
-    return vec / vec.norm(dim=1, keepdim=True)
+# def norm(vec: torch.Tensor):
+#     return vec / vec.norm(dim=1, keepdim=True)
+
+class Net(nn.Module):
+    def __init__(self, img_encoder, text_encoder) -> None:
+        super().__init__()
+        self.img_encoder = img_encoder
+        self.text_encoder = text_encoder
+    
+
+
+    def forward(self, img_1, img_2, prompt):
+        img_1_embedding = self.norm(self.img_encoder(img_1))
+        img_2_embedding = self.norm(self.img_encoder(img_2))
+        prompt_embedding = self.norm(self.text_encoder(prompt))
+        return img_1_embedding, img_2_embedding, prompt_embedding
+
+    def norm(self, vec: torch.Tensor):
+        return vec / vec.norm(dim=1, keepdim=True)
 
 class train_data(Dataset):
     def __init__(self, train_data_root):
@@ -152,7 +169,7 @@ class train_data(Dataset):
 # bad_dataset = train_data("bad", all_bad_images_path)  # bad图片数据集
 # dataset = good_dataset + bad_dataset  # 形成整个数据集
 dataset = train_data(train_data_root)
-print(dataset[2])
+# print(dataset[2])
 # print(len(dataset)) # >> 6040对
 # train_dataset, val_dataset = dataset[:5000], dataset[5000:]
 # train_dataset, val_dataset = train_test_split(dataset, test_size=0, train_size=5000)
@@ -162,16 +179,21 @@ batch_size = 16
 train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)  # dataloader batch_size设置的小是因为显存不够
 val_dataloader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
-proj = Projection().to(device)
+net = Net(model.encode_image, model.encode_text).to(device) # 从图片、文本到它们的embedding的网络
+proj = Projection().to(device)  # 用于InfoNCE计算前的embedding的投影函数
 
 
 # Loss: InfoNCE
-def InfoNCE(pos_logits, neg_logits, anchor_logits, tau: float = 0.8):
-    pos_pair = torch.exp(F.cosine_similarity(pos_logits, anchor_logits, dim=-1) / tau)
-    neg_pair = torch.exp(F.cosine_similarity(neg_logits, anchor_logits, dim=-1) / tau)
+def InfoNCE(pos_embeddings, neg_embeddings, anchor_embeddings, proj, tau: float = 0.8):
+    pos_embeddings = proj(pos_embeddings)
+    neg_embeddings = proj(neg_embeddings)
+    anchor_embeddings = proj(anchor_embeddings)
+    pos_pair = torch.exp(F.cosine_similarity(pos_embeddings, anchor_embeddings, dim=-1) / tau)
+    neg_pair = torch.exp(F.cosine_similarity(neg_embeddings, anchor_embeddings, dim=-1) / tau)
     return -torch.mean(torch.log(pos_pair / (pos_pair + neg_pair)))
 # loss_img = nn.CrossEntropyLoss().to(device)
 # loss_txt = nn.CrossEntropyLoss().to(device)
+
 
 
 
@@ -186,12 +208,10 @@ for i in range(10):
         prompt_tokens = clip.tokenize(prompt).to(device)
         good_imgs = good_img.to(device)
         bad_imgs = bad_img.to(device)
-        good_imgs_features = proj(norm(model.encode_image(good_imgs)))
-        bad_imgs_features = proj(norm(model.encode_image(bad_imgs)))
-        text_features = proj(norm(model.encode_text(prompt_tokens)))
+        good_imgs_embedding, bad_imgs_embedding, prompts_embedding = net(good_imgs, bad_imgs, prompt_tokens)
 
         # total_loss = (loss_img(logits_per_image, ground_truth) + loss_txt(logits_per_text, ground_truth)) / 2
-        loss = InfoNCE(good_imgs_features, bad_imgs_features, text_features)
+        loss = InfoNCE(good_imgs_embedding, bad_imgs_embedding, prompts_embedding, proj)
         epoch_loss += loss.item()
         optimizer.zero_grad()
         loss.backward()
@@ -212,11 +232,9 @@ for i in range(10):
             prompt_tokens = clip.tokenize(prompt).to(device)
             good_imgs = good_img.to(device)
             bad_imgs = bad_img.to(device)
-            good_imgs_features = proj(norm(model.encode_image(good_imgs)))
-            bad_imgs_features = proj(norm(model.encode_image(bad_imgs)))
-            text_features = proj(norm(model.encode_text(prompt_tokens)))
+            good_imgs_embedding, bad_imgs_embedding, prompts_embedding = None
             
-            cor += (F.cosine_similarity(good_imgs_features, text_features) >= F.cosine_similarity(bad_imgs_features, text_features)).sum().item()
+            cor += (F.cosine_similarity(good_imgs_embedding, prompts_embedding) >= F.cosine_similarity(bad_imgs_embedding, prompts_embedding)).sum().item()
             #else:
                 #print("%s's prompt is wrong" % str(raw_prompt))
             # if device == "cpu":
