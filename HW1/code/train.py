@@ -226,13 +226,13 @@ for i in range(10):
             clip.model.convert_weights(model)
 
     print('epoch %d, loss: %.3f' % (i + 1, epoch_loss))
-    if epoch_loss / batch_size >= 200:
+    if epoch_loss  >= 200:
         print("loss is larger than 200")
-        if epoch_loss / batch_size >= 10000:
+        if epoch_loss  >= 10000:
             print("loss is large, flying!")
-    elif epoch_loss / batch_size <= 10:
+    elif epoch_loss  <= 10:
         print("loss is smaller than 10")
-        if epoch_loss / batch_size <= 0.5:
+        if epoch_loss  <= 0.5:
             print("loss is small, flying!")
     """验证过程"""
     scheduler.step()
