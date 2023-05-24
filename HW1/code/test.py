@@ -4,16 +4,15 @@ import clip
 import torch
 from torch.utils.data import Dataset
 from PIL import Image
-from train import Net
 import torch.nn.functional as F 
 import pandas as pd
-
+from model import Net
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 _, preprocess = clip.load("ViT-B/32", device=device)
-model = torch.load('D:\DataMine\Data_Mining2023\HW1\code\model\model1-4.pkl')
+model = torch.load('D:\DataMine\Data_Mining2023\HW1\code\model\model1-9.pkl')
 
-test_data_root = r'D:\DataMine\Data_Mining2023\HW1\Project_Dataset\Selected_Test_Dataset'
+test_data_root = r'D:\DataMine\Data_Mining2023\HW1\Project_Dataset\Selected_Test_Dataset/'
 path_list = os.listdir(test_data_root)
 all_image1_path = []
 all_image2_path = []
@@ -44,7 +43,7 @@ class test_data(Dataset):
     def __getitem__(self, item):
         raw_img = Image.open(self.path[item])
         img = preprocess(raw_img)
-        txt = get_txt_path(self.path[item]) + 'prompt.txt'
+        txt = get_txt_path(os.path.dirname(os.path.dirname(self.path[item]))) + '/prompt.txt'
         file = open(txt, encoding='utf-8')
         prompt = file.read(300)
 
@@ -82,7 +81,9 @@ cor = 0
 
 
 # load已经存好的网络
-net = torch.load('moxing')
+model = torch.load('D:\DataMine\Data_Mining2023\HW1\code\model\model1-1.pkl').to(device)
+proj = torch.load('D:\DataMine\Data_Mining2023\HW1\code\model\proj1-1.pkl').to(device)
+net = Net(model.encode_image, model.encode_text, proj).to(device)
 # 定义一个保存good和bad的列表
 image_names = []
 image1s = []
@@ -115,4 +116,4 @@ dataframe = pd.DataFrame(data)
 dataframe.to_csv('./test_result.csv', encoding='utf-8')
 
 # print()
-print(cor, image1_dataset.__len__())
+# print(cor, image1_dataset.__len__())

@@ -9,7 +9,7 @@ from PIL import Image
 from sklearn.model_selection import train_test_split
 import torch.nn.functional as F
 from torch.optim import lr_scheduler
-
+from model import *
 """加载clip模型"""
 device = "cuda" if torch.cuda.is_available() else "cpu"
 learning_rate = 1e-5
@@ -81,34 +81,34 @@ def convert_models_to_fp32(model):
 #         # txt = "a " + self.label + " photo of " + prompt
 #         return img, txt, self.label, prompt
 
-class Projection(nn.Module):
-    def __init__(self, num_hidden=512) -> None:
-        super().__init__()
-        self.linear1 = nn.Linear(num_hidden, num_hidden, dtype=torch.float16)
-        self.linear2 = nn.Linear(num_hidden, num_hidden, dtype=torch.float16)
-        self.activation = F.relu
-
-    def forward(self, embedding):
-        return self.linear2(self.activation(self.linear1(embedding)))
+# class Projection(nn.Module):
+#     def __init__(self, num_hidden=512) -> None:
+#         super().__init__()
+#         self.linear1 = nn.Linear(num_hidden, num_hidden, dtype=torch.float16)
+#         self.linear2 = nn.Linear(num_hidden, num_hidden, dtype=torch.float16)
+#         self.activation = F.relu
+#
+#     def forward(self, embedding):
+#         return self.linear2(self.activation(self.linear1(embedding)))
 
 # def norm(vec: torch.Tensor):
 #     return vec / vec.norm(dim=1, keepdim=True)
 
-class Net(nn.Module):
-    def __init__(self, img_encoder, text_encoder, projection) -> None:
-        super().__init__()
-        self.img_encoder = img_encoder
-        self.text_encoder = text_encoder
-        self.projection = projection
-
-    def forward(self, img_1, img_2, prompt):
-        img_1_embedding = self.norm(self.img_encoder(img_1))
-        img_2_embedding = self.norm(self.img_encoder(img_2))
-        prompt_embedding = self.norm(self.text_encoder(prompt))
-        return self.projection(img_1_embedding), self.projection(img_2_embedding), self.projection(prompt_embedding)
-
-    def norm(self, vec: torch.Tensor):
-        return vec / vec.norm(dim=1, keepdim=True)
+# class Net(nn.Module):
+#     def __init__(self, img_encoder, text_encoder, projection) -> None:
+#         super().__init__()
+#         self.img_encoder = img_encoder
+#         self.text_encoder = text_encoder
+#         self.projection = projection
+#
+#     def forward(self, img_1, img_2, prompt):
+#         img_1_embedding = self.norm(self.img_encoder(img_1))
+#         img_2_embedding = self.norm(self.img_encoder(img_2))
+#         prompt_embedding = self.norm(self.text_encoder(prompt))
+#         return self.projection(img_1_embedding), self.projection(img_2_embedding), self.projection(prompt_embedding)
+#
+#     def norm(self, vec: torch.Tensor):
+#         return vec / vec.norm(dim=1, keepdim=True)
 
 class train_data(Dataset):
     def __init__(self, train_data_root):
@@ -181,7 +181,8 @@ val_dataloader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=
 
 proj = Projection().to(device)  # 用于InfoNCE计算前的embedding的投影函数
 net = Net(model.encode_image, model.encode_text, proj).to(device) # 从图片、文本到它们的embedding的网络
-
+for name, module in net.named_modules():
+    print(name, module)
 
 # Loss: InfoNCE
 def InfoNCE(pos_embeddings, neg_embeddings, anchor_embeddings, tau: float = 0.8):
@@ -241,12 +242,12 @@ for i in range(10):
     with torch.no_grad():
         cor = 0
         for batch, (good_img, bad_img, prompt, raw_prompt, _, _) in enumerate(val_dataloader):
-            
+
             prompt_tokens = clip.tokenize(prompt).to(device)
             good_imgs = good_img.to(device)
             bad_imgs = bad_img.to(device)
             good_imgs_embedding, bad_imgs_embedding, prompts_embedding = net(good_imgs, bad_imgs, prompt_tokens)
-            
+
             cor += (F.cosine_similarity(good_imgs_embedding, prompts_embedding) >= F.cosine_similarity(bad_imgs_embedding, prompts_embedding)).sum().item()
             #else:
                 #print("%s's prompt is wrong" % str(raw_prompt))
@@ -264,8 +265,8 @@ for i in range(10):
             #     print(txt, probs)
         print(cor, '/', val_dataset.__len__(), ' = ', cor / val_dataset.__len__())
 
-    #torch.save(model, 'model/model1-%s.pkl' % str(i))
-
+    torch.save(model, 'model/net1-%s.pkl' % str(i))
+    torch.save(proj, 'model/proj1-%s.pkl' % str(i))
 
 
 
