@@ -7,14 +7,20 @@ from TraceLoader import ObjectTrace
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, BaggingClassifier
 from sklearn.metrics import accuracy_score, f1_score
+from sklearn.neighbors import KNeighborsClassifier
 import pickle
 import os
+from mpl_toolkits import mplot3d
+import numpy as np
+import matplotlib.pyplot as plt
 from utils import *
+from pylab import mpl
+mpl.rcParams['font.sans-serif'] = ['SimHei']
 random_seed = 2023
 np.random.seed(random_seed)
-
+formation_l = {'单机': 0, '横队': 1, '三角': 2, '4': 3, '3': 4, '2': 5, '7': 6, '1': 7, '6': 8, '5': 9}
 
 def extract_intention_data(trace_file):
     traceModel = ObjectTrace()
@@ -38,39 +44,47 @@ def extract_intention_data(trace_file):
     labels = []
     seq_length = 5
     feature_dim = 4
+    p = 0
     hist_trace_dict = traceModel.hist_trace_dict
     for Id, hist_trace in hist_trace_dict.items():
+        #plot_3d_scatter(hist_trace['xyz'], hist_trace['Intention'], Id)
+        print(hist_trace['Intention'], hist_trace['Formation'], hist_trace['Wingman'], hist_trace['Group'], hist_trace['Model'], hist_trace['Points_num'])
+        p += hist_trace['Points_num']
         trace_length = len(hist_trace['Timestamp'])
         trace_intention = hist_trace['Intention'][0]
         xyz = hist_trace['xyz']
         speed = hist_trace['Speed']
+        att = hist_trace['Att']
         for idx in range(trace_length):
             start = idx
             end = min(start+seq_length, trace_length)
             features = []
             for idy in range(start, end):
                 # todo 能否挖掘出更多特征？哪些是有用特征，哪些是无用的？
-                feature = xyz[idy] + [speed[idy]]
+                feature = xyz[idy] + [speed[idy]] + att[idy]# + [formation_l[hist_trace['Formation'][0]]]
                 features.append(feature)
 
             # todo 这一步是做什么用？除了padding以外，还能怎么做？
             if end - start < seq_length:
+                break
                 for _ in range(seq_length - (end - start)):
                     features.append([0] * feature_dim)
 
             trace_data.append(features)
             labels.append([trace_intention])
-
     # todo 打印一下这两个array的形状，每一维的大小有什么含义吗？
     trace_data = np.array(trace_data)
     labels = np.array(labels)
     labels = labels.squeeze()
-
+    print(labels.shape)
+    print(trace_data.shape)
+    print(p)
     return trace_data, labels
 
 
 def train(train_file, model_path):
     trace_data, labels = extract_intention_data(train_file)
+    #print(trace_data, labels)
     sample_num, seq_length, feature_dim = trace_data.shape[0], trace_data.shape[1], trace_data.shape[2]
     le = LabelEncoder()
     le.fit(intention_type)
@@ -89,14 +103,18 @@ def train(train_file, model_path):
                                                       test_size=0.2,
                                                       random_state=random_seed)
     # todo 对于一个模型，如何寻找最优参数设置？
-    clf = RandomForestClassifier(n_estimators=50,
+    clf = RandomForestClassifier(n_estimators=40,
                                  criterion='gini',
-                                 max_depth=2,
+                                 max_depth=3,
                                  min_samples_split=2,
                                  bootstrap=True,
                                  random_state=0)
+
+    #knn = KNeighborsClassifier(n_neighbors=5)
+    #clf = BaggingClassifier(base_estimator=knn, n_estimators=3, bootstrap=True, random_state=0)
     clf.fit(x_train, y_train)
     y_train_predict = clf.predict(x_train)
+    print(y_train_predict)
     y_dev_predict = clf.predict(x_dev)
     train_accuracy_score = accuracy_score(y_true=y_train, y_pred=y_train_predict)
     train_f1_score = f1_score(y_true=y_train, y_pred=y_train_predict, average='macro')
@@ -133,6 +151,24 @@ def test(file_path, model_path, scaler):
     print('Test accuracy = {:.4}, f1_score = {:.4}'.format(test_accuracy_score, test_f1_score))
     # todo 如若效果不理想，有什么改进的思路吗？是否可以分析一下错误的样本，挖掘哪些样本容易被分类器分错？
 
+
+def plot_3d_scatter(arr, label, t):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    x = []
+    y = []
+    z = []
+
+    for i in range(len(arr)):
+        x.append(arr[i][0])
+        y.append(arr[i][1])
+        z.append(arr[i][2])
+
+    ax.scatter(x, y, z)
+    plt.title(label)
+    #plt.show()
+    plt.savefig(t + '.png')
 
 if __name__ == '__main__':
     train_file_path = 'dataset/BekaaValley_train.csv'
