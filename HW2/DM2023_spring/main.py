@@ -33,7 +33,7 @@ def extract_intention_data(trace_file):
             init_timestamp = timestamp
             curr_time_planes.append(line_list)
 
-    # TODO: 为了更清楚敌我双方的情况,数据读取完以后是不是可以做一些统计分析？
+    # todo 为了更清楚敌我双方的情况,数据读取完以后是不是可以做一些统计分析？
     trace_data = []
     labels = []
     seq_length = 5
@@ -49,11 +49,11 @@ def extract_intention_data(trace_file):
             end = min(start+seq_length, trace_length)
             features = []
             for idy in range(start, end):
-                # TODO: 能否挖掘出更多特征？哪些是有用特征，哪些是无用的？
+                # todo 能否挖掘出更多特征？哪些是有用特征，哪些是无用的？
                 feature = xyz[idy] + [speed[idy]]
                 features.append(feature)
 
-            # TODO: 这一步是做什么用？除了padding以外，还能怎么做？
+            # todo 这一步是做什么用？除了padding以外，还能怎么做？
             if end - start < seq_length:
                 for _ in range(seq_length - (end - start)):
                     features.append([0] * feature_dim)
@@ -61,7 +61,7 @@ def extract_intention_data(trace_file):
             trace_data.append(features)
             labels.append([trace_intention])
 
-    # TODO: 打印一下这两个array的形状，每一维的大小有什么含义吗？
+    # todo 打印一下这两个array的形状，每一维的大小有什么含义吗？
     trace_data = np.array(trace_data)
     labels = np.array(labels)
     labels = labels.squeeze()
@@ -75,20 +75,20 @@ def train(train_file, model_path):
     le = LabelEncoder()
     le.fit(intention_type)
     trace_labels = le.transform(labels)
-    # TODO: 为啥数据集要打乱？
+    # todo 为啥数据集要打乱？
     shuffled_trace_data, shuffled_trace_labels = shuffle(trace_data, trace_labels)
     scaler = StandardScaler()
     shuffled_trace_data = shuffled_trace_data.reshape(sample_num * seq_length, -1)
     scaler.fit(shuffled_trace_data)
-    # TODO: 标准化有什么作用？标准化处理对所有的模型都有帮助吗？
+    # todo 标准化有什么作用？标准化处理对所有的模型都有帮助吗？
     shuffled_trace_data = scaler.transform(shuffled_trace_data)
     shuffled_trace_data = shuffled_trace_data.reshape(sample_num, -1)
-    # TODO: 训练集和验证集的统计情况是怎么样的？
+    # todo 训练集和验证集的统计情况是怎么样的？
     x_train, x_dev, y_train, y_dev = train_test_split(shuffled_trace_data,
                                                       shuffled_trace_labels,
                                                       test_size=0.2,
                                                       random_state=random_seed)
-    # TODO: 对于一个模型，如何寻找最优参数设置？
+    # todo 对于一个模型，如何寻找最优参数设置？
     clf = RandomForestClassifier(n_estimators=50,
                                  criterion='gini',
                                  max_depth=2,
@@ -110,19 +110,18 @@ def train(train_file, model_path):
     with open(model_path, 'wb') as fa:
         pickle.dump(clf, fa)
     print('Model is saved at {}'.format(os.path.join(os.getcwd(), model_path)))
+    return scaler
 
 
-def test(file_path, model_path):
+def test(file_path, model_path, scaler):
     print('Start evaluate...')
     trace_data, labels = extract_intention_data(file_path)
     sample_num, seq_length, feature_dim = trace_data.shape[0], trace_data.shape[1], trace_data.shape[2]
     le = LabelEncoder()
     le.fit(intention_type)
     trace_labels = le.transform(labels)
-    scaler = StandardScaler()
-    # TODO: 测试的时候是否需要shuffle?
+    # todo 测试的时候是否需要shuffle?
     trace_data = trace_data.reshape(sample_num * seq_length, -1)
-    scaler.fit(trace_data)
     trace_data = scaler.transform(trace_data)
     trace_data = trace_data.reshape(sample_num, -1)
     with open(model_path, 'rb') as fa:
@@ -130,15 +129,15 @@ def test(file_path, model_path):
     trace_pred = clf.predict(trace_data)
     test_accuracy_score = accuracy_score(y_true=trace_labels, y_pred=trace_pred)
     test_f1_score = f1_score(y_true=trace_labels, y_pred=trace_pred, average='macro')
-    # TODO: 验证集和测试集有什么不同？一般来说，哪个集合上的效果会理想一些？到底应该按哪个指标去选取我们的模型？
+    # todo 验证集和测试集有什么不同？一般来说，哪个集合上的效果会理想一些？到底应该按哪个指标去选取我们的模型？
     print('Test accuracy = {:.4}, f1_score = {:.4}'.format(test_accuracy_score, test_f1_score))
-    # TODO: 如若效果不理想，有什么改进的思路吗？是否可以分析一下错误的样本，挖掘哪些样本容易被分类器分错？
+    # todo 如若效果不理想，有什么改进的思路吗？是否可以分析一下错误的样本，挖掘哪些样本容易被分类器分错？
 
 
 if __name__ == '__main__':
     train_file_path = 'dataset/BekaaValley_train.csv'
     model_path = 'clf_model.pkl'
-    train(train_file_path, model_path)
+    train_scaler = train(train_file_path, model_path)
     test_file_path = 'dataset/BekaaValley_test.csv'
     best_model_path = 'clf_model.pkl'
-    test(test_file_path, best_model_path)
+    test(test_file_path, best_model_path, train_scaler)
