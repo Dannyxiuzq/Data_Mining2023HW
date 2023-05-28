@@ -3,22 +3,18 @@ author:yqtong@buaa.edu.cn
 date:2023-05-04
 """
 import numpy as np
-from sklearn.naive_bayes import MultinomialNB, GaussianNB
-import xgboost as xgb
 from TraceLoader import ObjectTrace
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
-from sklearn.ensemble import RandomForestClassifier, BaggingClassifier
-from sklearn.metrics import accuracy_score, f1_score, classification_report
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
-
 from sklearn.ensemble import RandomForestClassifier, BaggingClassifier, VotingClassifier
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
-
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.naive_bayes import GaussianNB
+import xgboost as xgb
+from sklearn.gaussian_process.kernels import RBF, DotProduct
 import pickle
 import os
 from mpl_toolkits import mplot3d
@@ -37,7 +33,6 @@ count1 = {'打击': {'打击': 0, '干扰': 0, '诱扰': 0, '侦察': 0, '指挥
           '侦察': {'打击': 0, '干扰': 0, '诱扰': 0, '侦察': 0, '指挥': 0},
           '指挥': {'打击': 0, '干扰': 0, '诱扰': 0, '侦察': 0, '指挥': 0}}
 i_map = {2: '打击', 0: '侦察', 3: '指挥', 4: '诱扰', 1: '干扰'}
-
 def extract_intention_data(trace_file):
     traceModel = ObjectTrace()
     with open(trace_file, 'r', encoding='utf-8') as fa:
@@ -83,13 +78,17 @@ def extract_intention_data(trace_file):
         d_h = hist_trace['Delta_h']
         d_v = hist_trace['Delta_v']
         d_a = hist_trace['Delta_att']
+        #print(trace_length)
         for idx in range(trace_length):
+            #print(trace_length)
+            if idx == trace_length - 5:
+                break
             start = idx
             end = min(start+seq_length, trace_length)
             features = []
             for idy in range(start, end):
                 # todo 能否挖掘出更多特征？哪些是有用特征，哪些是无用的？
-                feature = xyz[idy] + [speed[idy]] + att[idy] + vel[idy]# + [formation_l[hist_trace['Formation'][0]]]
+                feature = xyz[idy] + [speed[idy]] + att[idy] + vel[idy] + [d_v[idy]]# + [formation_l[hist_trace['Formation'][0]]]
                 features.append(feature)
 
             # todo 这一步是做什么用？除了padding以外，还能怎么做？
@@ -137,35 +136,31 @@ def train(train_file, model_path):
                                                       test_size=0.2,
                                                       random_state=random_seed)
     # todo 对于一个模型，如何寻找最优参数设置？
-    #模型集成部分
-    models = []
-    rf_clf = RandomForestClassifier(n_estimators=55,
+    model=[]
+    rf_clf = RandomForestClassifier(n_estimators=20,
                                  criterion='gini',
                                  max_depth=3,
                                  min_samples_split=2,
                                  bootstrap=True,
                                  random_state=0)
-    models.append(('rf', rf_clf))
-    NB_classifier = GaussianNB()
-    # NB_classifier = MultinomialNB(
-    #     alpha=0.03
-    # )
-    models.append(('NB', NB_classifier))
-    svm = SVC(C=0.5, gamma=0.07, kernel='rbf', probability=True)
-    models.append(('svm', svm))
-    XGBT_classifier = xgb.XGBClassifier(
-        max_depth=11,
-        n_estimators=80,
-        learning_rate=0.25,
-        gamma=0.3,
-        objective='multi:softmax',
-    )
-    models.append(('XGBT', XGBT_classifier))
+    model.append(('rf', rf_clf))
+    svm = SVC(C=1, gamma=0.17, kernel='rbf', probability=True)
+    model.append(('svm', svm))
     knn = KNeighborsClassifier(n_neighbors=3)
-    #clf = GaussianProcessClassifier()
+    #kernels = 1.0 * RBF(length_scale=1.0), 1.0 * DotProduct(sigma_0=1.0) ** 2
+    #gpc = GaussianProcessClassifier(kernel=None, warm_start=True)
+    # XGBT_classifier = xgb.XGBClassifier(
+    #     max_depth=4,
+    #     n_estimators=30,
+    #     learning_rate=0.25,
+    #     gamma=0.3,
+    #     objective='multi:softmax',
+    # )
+    # model.append(('XGBT', XGBT_classifier))
     clf = VotingClassifier(
-        estimators=models,
+        estimators=model,
         voting='soft')
+
     #clf = KNeighborsClassifier(n_neighbors=10)
     #clf = BaggingClassifier(base_estimator=knn, n_estimators=3, bootstrap=True, random_state=0)
     clf.fit(x_train, y_train)
