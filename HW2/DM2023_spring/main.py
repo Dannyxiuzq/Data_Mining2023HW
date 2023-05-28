@@ -8,7 +8,8 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
 from sklearn.ensemble import RandomForestClassifier, BaggingClassifier
-from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
+from sklearn.metrics import accuracy_score, f1_score, classification_report
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from sklearn.neighbors import KNeighborsClassifier
 import pickle
 import os
@@ -29,6 +30,7 @@ count1 = {'打击': {'打击': 0, '干扰': 0, '诱扰': 0, '侦察': 0, '指挥
           '侦察': {'打击': 0, '干扰': 0, '诱扰': 0, '侦察': 0, '指挥': 0},
           '指挥': {'打击': 0, '干扰': 0, '诱扰': 0, '侦察': 0, '指挥': 0}}
 i_map = {2: '打击', 0: '侦察', 3: '指挥', 4: '诱扰', 1: '干扰'}
+
 
 def extract_intention_data(trace_file):
     traceModel = ObjectTrace()
