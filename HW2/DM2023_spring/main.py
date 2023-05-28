@@ -3,6 +3,8 @@ author:yqtong@buaa.edu.cn
 date:2023-05-04
 """
 import numpy as np
+from sklearn.naive_bayes import MultinomialNB, GaussianNB
+import xgboost as xgb
 from TraceLoader import ObjectTrace
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
@@ -135,17 +137,34 @@ def train(train_file, model_path):
                                                       test_size=0.2,
                                                       random_state=random_seed)
     # todo 对于一个模型，如何寻找最优参数设置？
+    #模型集成部分
+    models = []
     rf_clf = RandomForestClassifier(n_estimators=55,
                                  criterion='gini',
                                  max_depth=3,
                                  min_samples_split=2,
                                  bootstrap=True,
                                  random_state=0)
+    models.append(('rf', rf_clf))
+    NB_classifier = GaussianNB()
+    # NB_classifier = MultinomialNB(
+    #     alpha=0.03
+    # )
+    models.append(('NB', NB_classifier))
     svm = SVC(C=0.5, gamma=0.07, kernel='rbf', probability=True)
+    models.append(('svm', svm))
+    XGBT_classifier = xgb.XGBClassifier(
+        max_depth=11,
+        n_estimators=80,
+        learning_rate=0.25,
+        gamma=0.3,
+        objective='multi:softmax',
+    )
+    models.append(('XGBT', XGBT_classifier))
     knn = KNeighborsClassifier(n_neighbors=3)
     #clf = GaussianProcessClassifier()
     clf = VotingClassifier(
-        estimators=[('svm', svm), ('rf', rf_clf)],
+        estimators=models,
         voting='soft')
     #clf = KNeighborsClassifier(n_neighbors=10)
     #clf = BaggingClassifier(base_estimator=knn, n_estimators=3, bootstrap=True, random_state=0)
