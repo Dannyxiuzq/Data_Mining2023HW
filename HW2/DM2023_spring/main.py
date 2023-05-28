@@ -10,7 +10,13 @@ from sklearn.utils import shuffle
 from sklearn.ensemble import RandomForestClassifier, BaggingClassifier
 from sklearn.metrics import accuracy_score, f1_score, classification_report
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+
+from sklearn.ensemble import RandomForestClassifier, BaggingClassifier, VotingClassifier
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
+
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
+from sklearn.gaussian_process import GaussianProcessClassifier
 import pickle
 import os
 from mpl_toolkits import mplot3d
@@ -22,7 +28,6 @@ mpl.rcParams['font.sans-serif'] = ['SimHei']
 random_seed = 2023
 np.random.seed(random_seed)
 formation_l = {'单机': 0, '横队': 1, '三角': 2, '4': 3, '3': 4, '2': 5, '7': 6, '1': 7, '6': 8, '5': 9}
-
 count = {'打击': 0, '干扰': 0, '诱扰': 0, '侦察': 0, '指挥': 0}
 count1 = {'打击': {'打击': 0, '干扰': 0, '诱扰': 0, '侦察': 0, '指挥': 0},
           '干扰': {'打击': 0, '干扰': 0, '诱扰': 0, '侦察': 0, '指挥': 0},
@@ -30,7 +35,6 @@ count1 = {'打击': {'打击': 0, '干扰': 0, '诱扰': 0, '侦察': 0, '指挥
           '侦察': {'打击': 0, '干扰': 0, '诱扰': 0, '侦察': 0, '指挥': 0},
           '指挥': {'打击': 0, '干扰': 0, '诱扰': 0, '侦察': 0, '指挥': 0}}
 i_map = {2: '打击', 0: '侦察', 3: '指挥', 4: '诱扰', 1: '干扰'}
-
 
 def extract_intention_data(trace_file):
     traceModel = ObjectTrace()
@@ -131,13 +135,18 @@ def train(train_file, model_path):
                                                       test_size=0.2,
                                                       random_state=random_seed)
     # todo 对于一个模型，如何寻找最优参数设置？
-    clf = RandomForestClassifier(n_estimators=55,
+    rf_clf = RandomForestClassifier(n_estimators=55,
                                  criterion='gini',
                                  max_depth=3,
                                  min_samples_split=2,
                                  bootstrap=True,
                                  random_state=0)
-
+    svm = SVC(C=0.5, gamma=0.07, kernel='rbf', probability=True)
+    knn = KNeighborsClassifier(n_neighbors=3)
+    #clf = GaussianProcessClassifier()
+    clf = VotingClassifier(
+        estimators=[('svm', svm), ('rf', rf_clf)],
+        voting='soft')
     #clf = KNeighborsClassifier(n_neighbors=10)
     #clf = BaggingClassifier(base_estimator=knn, n_estimators=3, bootstrap=True, random_state=0)
     clf.fit(x_train, y_train)
