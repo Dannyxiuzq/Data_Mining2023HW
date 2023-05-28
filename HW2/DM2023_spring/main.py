@@ -22,6 +22,7 @@ random_seed = 2023
 np.random.seed(random_seed)
 formation_l = {'单机': 0, '横队': 1, '三角': 2, '4': 3, '3': 4, '2': 5, '7': 6, '1': 7, '6': 8, '5': 9}
 
+
 def extract_intention_data(trace_file):
     traceModel = ObjectTrace()
     with open(trace_file, 'r', encoding='utf-8') as fa:
