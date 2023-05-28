@@ -102,7 +102,10 @@ with torch.no_grad():
         text = clip.tokenize("A photo of " + txt + '.').to(device)
         img1_embedding, img2_embedding, prompt_embedding = net(img1, img2, text)
         img1Better = True if F.cosine_similarity(img1_embedding, prompt_embedding) > F.cosine_similarity(img2_embedding, prompt_embedding) else False
-        
+        score_img1 = F.cosine_similarity(img1_embedding, prompt_embedding)  # clip img1 score
+        score_img2 = F.cosine_similarity(img2_embedding, prompt_embedding)  # clip img2 score
+        img1Better = True if score_img1 > score_img2 else False
+
         image_names.append(file_name)
         image1s.append('good' if img1Better else 'bad')
         image2s.append('bad' if img1Better else 'good')
