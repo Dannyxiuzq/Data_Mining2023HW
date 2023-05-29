@@ -7,6 +7,9 @@ from PIL import Image
 import torch.nn.functional as F 
 import pandas as pd
 from model import Net
+from CE_score import get_ce_score
+from D_score import get_D_score
+import joblib
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 _, preprocess = clip.load("ViT-B/32", device=device)
@@ -88,6 +91,8 @@ net = Net(model.encode_image, model.encode_text, proj).to(device)
 image_names = []
 image1s = []
 image2s = []
+knn = joblib.load('model\knn.plk')
+svm = joblib.load('model\svm.plk')
 
 with torch.no_grad():
     """
@@ -97,6 +102,8 @@ with torch.no_grad():
     for i in range(image1_dataset.__len__()):
         img1 = image1_dataset[i][0].unsqueeze(0).to(device)
         img2 = image2_dataset[i][0].unsqueeze(0).to(device)
+        raw_img1 = image1_dataset[i][2]
+        raw_img2 = image2_dataset[i][2]
         txt = image1_dataset[i][1]
         file_name = image1_dataset[i][3]
         text = clip.tokenize("A photo of " + txt + '.').to(device)
@@ -104,8 +111,13 @@ with torch.no_grad():
         img1Better = True if F.cosine_similarity(img1_embedding, prompt_embedding) > F.cosine_similarity(img2_embedding, prompt_embedding) else False
         score_img1 = F.cosine_similarity(img1_embedding, prompt_embedding)  # clip img1 score
         score_img2 = F.cosine_similarity(img2_embedding, prompt_embedding)  # clip img2 score
+        ce_score_img1 = get_ce_score(knn, svm, raw_img1, 3)[0][1]
+        ce_score_img2 = get_ce_score(knn, svm, raw_img2, 3)[0][1]
+        d_score_img1 = get_D_score(raw_img1, txt)
+        d_score_img2 = get_D_score(raw_img2, txt)
+        score_img1 = score_img1 * 0.9 + ce_score_img1 * 0.05 + d_score_img1 * 0.05
+        score_img2 = score_img2 * 0.8 + ce_score_img2 * 0.05 + d_score_img2 * 0.05
         img1Better = True if score_img1 > score_img2 else False
-
         image_names.append(file_name)
         image1s.append('good' if img1Better else 'bad')
         image2s.append('bad' if img1Better else 'good')
@@ -120,3 +132,5 @@ dataframe.to_csv('./test_result.csv', encoding='utf-8')
 
 # print()
 # print(cor, image1_dataset.__len__())
+
+

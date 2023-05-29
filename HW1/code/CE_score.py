@@ -151,10 +151,10 @@ def train(dataset, n=35, gamma=0.07, C=20):
     X = [[x1, x2] for x1, x2 in zip(c, e)]
     knn = KNeighborsClassifier(n_neighbors=n)
     knn.fit(X, y)
-    joblib.dump(knn, 'knn.plk')
+    joblib.dump(knn, 'model/knn.plk')
     svm = SVC(kernel='rbf', gamma=gamma, C=C, probability=True)
     svm.fit(X, y)
-    joblib.dump(svm, 'svm.plk')
+    joblib.dump(svm, 'model/svm.plk')
 
 
 #img_path = "Project_Dataset/Selected_Train_Dataset/a yellow t-shirt with a dog on it_/bad/a-yellow-t-shirt-with-a-dog-on-3.png"

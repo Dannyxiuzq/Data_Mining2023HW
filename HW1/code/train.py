@@ -3,6 +3,10 @@ import glob
 import clip
 import torch
 import numpy as np
+from CE_score import get_batch_ce_score
+from D_score import get_batch_score
+import joblib
+from tqdm import tqdm
 from torch import nn, optim
 from torch.utils.data import Dataset, DataLoader, random_split
 from PIL import Image
@@ -13,6 +17,10 @@ from model import *
 """加载clip模型"""
 device = "cuda" if torch.cuda.is_available() else "cpu"
 learning_rate = 1e-5
+is_train = False
+is_eval = True
+knn = joblib.load('model\knn.plk')
+svm = joblib.load('model\svm.plk')
 model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
 if device == "cpu":
     model.float()
@@ -50,65 +58,6 @@ def convert_models_to_fp32(model):
         if p.grad is not None:
             p.grad.data = p.grad.data.float()
 
-# class train_data(Dataset):
-#     def __init__(self, lable, img_path_list):
-#         self.path = img_path_list
-#         self.label = lable
-
-#     def __len__(self):
-#         return len(self.path)
-
-#     def __getitem__(self, item):
-#         """
-#         :param item:
-#         :return:
-#             img:图片
-#             txt:图片质量+图片描述
-#             label:图片质量-good/bad 图片好/坏
-#             prompt:图片描述-prompt.txt文本内容
-#         """
-#         img = Image.open(self.path[item])
-#         img = preprocess(img)
-#         txt = get_txt_path(self.path[item]) + 'prompt.txt'
-#         file = open(txt, encoding='utf-8')
-#         prompt = file.read(300)
-
-#         if self.label == "good":
-#             txt = "a beautiful and concise photo of " + prompt
-#         else:
-#             txt = "a mussy photo of " + prompt
-
-#         # txt = "a " + self.label + " photo of " + prompt
-#         return img, txt, self.label, prompt
-
-# class Projection(nn.Module):
-#     def __init__(self, num_hidden=512) -> None:
-#         super().__init__()
-#         self.linear1 = nn.Linear(num_hidden, num_hidden, dtype=torch.float16)
-#         self.linear2 = nn.Linear(num_hidden, num_hidden, dtype=torch.float16)
-#         self.activation = F.relu
-#
-#     def forward(self, embedding):
-#         return self.linear2(self.activation(self.linear1(embedding)))
-
-# def norm(vec: torch.Tensor):
-#     return vec / vec.norm(dim=1, keepdim=True)
-
-# class Net(nn.Module):
-#     def __init__(self, img_encoder, text_encoder, projection) -> None:
-#         super().__init__()
-#         self.img_encoder = img_encoder
-#         self.text_encoder = text_encoder
-#         self.projection = projection
-#
-#     def forward(self, img_1, img_2, prompt):
-#         img_1_embedding = self.norm(self.img_encoder(img_1))
-#         img_2_embedding = self.norm(self.img_encoder(img_2))
-#         prompt_embedding = self.norm(self.text_encoder(prompt))
-#         return self.projection(img_1_embedding), self.projection(img_2_embedding), self.projection(prompt_embedding)
-#
-#     def norm(self, vec: torch.Tensor):
-#         return vec / vec.norm(dim=1, keepdim=True)
 
 class train_data(Dataset):
     def __init__(self, train_data_root):
@@ -173,7 +122,7 @@ dataset = train_data(train_data_root)
 # print(len(dataset)) # >> 6040对
 # train_dataset, val_dataset = dataset[:5000], dataset[5000:]
 # train_dataset, val_dataset = train_test_split(dataset, test_size=0, train_size=5000)
-train_dataset, val_dataset, _ = random_split(dataset=dataset, lengths=[5000, 1000, 40])#[9664, 2416])
+train_dataset, val_dataset, _ = random_split(dataset=dataset, lengths=[5000, 1000, 40],generator=torch.manual_seed(0))#[9664, 2416])
 # train_dataset, val_dataset = random_split(dataset=dataset, lengths=[9664, 2416])  # 训练集和验证集划分 4:1
 batch_size = 16
 train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)  # dataloader batch_size设置的小是因为显存不够
@@ -195,7 +144,10 @@ def InfoNCE(pos_embeddings, neg_embeddings, anchor_embeddings, tau: float = 0.8)
 # loss_img = nn.CrossEntropyLoss().to(device)
 # loss_txt = nn.CrossEntropyLoss().to(device)
 
-
+if is_eval == True and is_train == False:
+    model = torch.load('model\model1-9.pkl').to(device)
+    proj = torch.load('model\proj1-0.pkl').to(device)
+    net = Net(model.encode_image, model.encode_text, proj).to(device)
 
 
 
@@ -207,66 +159,89 @@ scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.5)
 for i in range(10):
     epoch_loss = 0
     """训练过程"""
-    for batch, (good_img, bad_img, prompt, _, _, _) in enumerate(train_dataloader):
-        print('.', end='')
-        prompt_tokens = clip.tokenize(prompt).to(device)
-        good_imgs = good_img.to(device)
-        bad_imgs = bad_img.to(device)
-        good_imgs_embedding, bad_imgs_embedding, prompts_embedding = net(good_imgs, bad_imgs, prompt_tokens)
-        # total_loss = (loss_img(logits_per_image, ground_truth) + loss_txt(logits_per_text, ground_truth)) / 2
-        loss = InfoNCE(good_imgs_embedding, bad_imgs_embedding, prompts_embedding, tau=0.4)
-        epoch_loss += loss.item()
-        optimizer.zero_grad()
-        loss.backward()
-        if device == "cpu":
-            optimizer.step()
-
-        else:
-            convert_models_to_fp32(model)
-            optimizer.step()
-            clip.model.convert_weights(model)
-
-    print('epoch %d, loss: %.3f' % (i + 1, epoch_loss))
-    if epoch_loss  >= 200:
-        print("loss is larger than 200")
-        if epoch_loss  >= 10000:
-            print("loss is large, flying!")
-    elif epoch_loss  <= 10:
-        print("loss is smaller than 10")
-        if epoch_loss  <= 0.5:
-            print("loss is small, flying!")
-    """验证过程"""
-    scheduler.step()
-    #print(learning_rate,optimizer.param_groups[0]['lr'])
-
-    with torch.no_grad():
-        cor = 0
-        for batch, (good_img, bad_img, prompt, raw_prompt, _, _) in enumerate(val_dataloader):
-
+    if is_train is True:
+        for batch, (good_img, bad_img, prompt, _, _, _) in enumerate(train_dataloader):
+            print('.', end='')
             prompt_tokens = clip.tokenize(prompt).to(device)
             good_imgs = good_img.to(device)
             bad_imgs = bad_img.to(device)
             good_imgs_embedding, bad_imgs_embedding, prompts_embedding = net(good_imgs, bad_imgs, prompt_tokens)
+            # total_loss = (loss_img(logits_per_image, ground_truth) + loss_txt(logits_per_text, ground_truth)) / 2
+            loss = InfoNCE(good_imgs_embedding, bad_imgs_embedding, prompts_embedding, tau=0.4)
+            epoch_loss += loss.item()
+            optimizer.zero_grad()
+            loss.backward()
+            if device == "cpu":
+                optimizer.step()
 
-            cor += (F.cosine_similarity(good_imgs_embedding, prompts_embedding) >= F.cosine_similarity(bad_imgs_embedding, prompts_embedding)).sum().item()
-            #else:
-                #print("%s's prompt is wrong" % str(raw_prompt))
-            # if device == "cpu":
-            #     ground_truth = torch.arange(1).long().to(device)
-            # else:
-            #     ground_truth = torch.arange(1, dtype=torch.long, device=device)
+            else:
+                convert_models_to_fp32(model)
+                optimizer.step()
+                clip.model.convert_weights(model)
 
-            # probs = logits_per_image.softmax(dim=-1).cpu().numpy()
-            # pred = np.argmax(probs)
-            # """预测[good, bad]的概率[pgood, pbad],如果pgood > pbad 则预测为good, 反之为bad"""
-            # if (pred == 0 and label[0] == "good") or (pred == 1 and label[0] == "bad"):
-            #     cor += 1
-            # else:
-            #     print(txt, probs)
-        print(cor, '/', val_dataset.__len__(), ' = ', cor / val_dataset.__len__())
+        print('epoch %d, loss: %.3f' % (i + 1, epoch_loss))
+        if epoch_loss  >= 200:
+            print("loss is larger than 200")
+            if epoch_loss  >= 10000:
+                print("loss is large, flying!")
+        elif epoch_loss  <= 10:
+            print("loss is smaller than 10")
+            if epoch_loss  <= 0.5:
+                print("loss is small, flying!")
+        """验证过程"""
+        scheduler.step()
+        #print(learning_rate,optimizer.param_groups[0]['lr'])
+    if is_eval is True:
+        with torch.no_grad():
+            cor = 0
+            cor_c = 0
+            cor_b = 0
+            for batch, (good_img, bad_img, prompt, raw_prompt, good_img_path, bad_img_path) in enumerate(val_dataloader):
 
-    torch.save(model, 'model/net1-%s.pkl' % str(i))
-    torch.save(proj, 'model/proj1-%s.pkl' % str(i))
+                prompt_tokens = clip.tokenize(prompt).to(device)
+                good_imgs = good_img.to(device)
+                bad_imgs = bad_img.to(device)
+                good_imgs_embedding, bad_imgs_embedding, prompts_embedding = net(good_imgs, bad_imgs, prompt_tokens)
+
+                good_ce_score = get_batch_ce_score(good_img_path, knn, svm, 3)
+                bad_ce_score = get_batch_ce_score(bad_img_path, knn, svm, 3)
+                good_ce_score = torch.Tensor(np.array([row[0][1] for row in good_ce_score])).to(device)
+                bad_ce_score = torch.Tensor(np.array([row[0][1] for row in bad_ce_score])).to(device)
+
+                cor += (0.95 * F.cosine_similarity(good_imgs_embedding,
+                                                   prompts_embedding) + 0.05 * good_ce_score >= 0.95 * F.cosine_similarity(
+                    bad_imgs_embedding, prompts_embedding) + 0.05 * bad_ce_score).sum().item()
+                cor_c += (F.cosine_similarity(good_imgs_embedding, prompts_embedding) >= F.cosine_similarity(
+                    bad_imgs_embedding, prompts_embedding)).sum().item()
+                cor_b += (good_ce_score >= bad_ce_score).sum().item()
+                print(cor,cor_c,cor_b)
+                #else:
+                    #print("%s's prompt is wrong" % str(raw_prompt))
+                # if device == "cpu":
+                #     ground_truth = torch.arange(1).long().to(device)
+                # else:
+                #     ground_truth = torch.arange(1, dtype=torch.long, device=device)
+
+                # probs = logits_per_image.softmax(dim=-1).cpu().numpy()
+                # pred = np.argmax(probs)
+                # """预测[good, bad]的概率[pgood, pbad],如果pgood > pbad 则预测为good, 反之为bad"""
+                # if (pred == 0 and label[0] == "good") or (pred == 1 and label[0] == "bad"):
+                #     cor += 1
+                # else:
+                #     print(txt, probs)
+                print(cor, cor_c, cor_b)
+                # print(good_d_score, bad_d_score)
+                print(good_ce_score, bad_ce_score)
+                print(F.cosine_similarity(good_imgs_embedding, prompts_embedding),
+                      F.cosine_similarity(bad_imgs_embedding, prompts_embedding))
+                print(0.95 * F.cosine_similarity(good_imgs_embedding, prompts_embedding) + 0.05 * good_ce_score,
+                      0.95 * F.cosine_similarity(bad_imgs_embedding, prompts_embedding) + 0.05 * bad_ce_score)
+            print(cor, '/', val_dataset.__len__(), ' = ', cor / val_dataset.__len__())
+            print(cor_c, '/', val_dataset.__len__(), ' = ', cor_c / val_dataset.__len__())
+            print(cor_b, '/', val_dataset.__len__(), ' = ', cor_b / val_dataset.__len__())
+
+    #torch.save(model, 'model/net1-%s.pkl' % str(i))# if not want to save model please comment
+    #torch.save(proj, 'model/proj1-%s.pkl' % str(i))# if not want to save model please comment
 
 
 
