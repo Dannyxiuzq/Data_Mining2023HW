@@ -5,7 +5,8 @@ import requests
 from PIL.Image import Image
 from transformers import ViltProcessor, ViltForQuestionAnswering, AutoModelForQuestionAnswering, AutoTokenizer, pipeline
 from PIL import Image
-
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 nlp = spacy.load('en_core_web_sm')
 stop_words = spacy.lang.en.stop_words.STOP_WORDS
@@ -110,7 +111,9 @@ def get_score(descriptive_matrix, score_matrix, image=None):
 def get_D_score(img, prompt):
     descriptive_matrix, score_matrix = get_matrix(prompt)
     score_matrix = get_score(descriptive_matrix, score_matrix, img)
+    score_matrix = score_matrix.values
     describe_score = score_matrix.mean(axis=None)
+    #print(describe_score)
     if np.isnan(describe_score):
         describe_score = 0
     return describe_score

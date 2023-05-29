@@ -229,13 +229,17 @@ for i in range(10):
                 #     cor += 1
                 # else:
                 #     print(txt, probs)
-                print(cor, cor_c, cor_b)
+                print( cor, cor_c, cor_b)
+                print('--------------')
                 # print(good_d_score, bad_d_score)
                 print(good_ce_score, bad_ce_score)
+                print('--------------')
                 print(F.cosine_similarity(good_imgs_embedding, prompts_embedding),
                       F.cosine_similarity(bad_imgs_embedding, prompts_embedding))
+                print('--------------')
                 print(0.95 * F.cosine_similarity(good_imgs_embedding, prompts_embedding) + 0.05 * good_ce_score,
                       0.95 * F.cosine_similarity(bad_imgs_embedding, prompts_embedding) + 0.05 * bad_ce_score)
+                print('--------------')
             print(cor, '/', val_dataset.__len__(), ' = ', cor / val_dataset.__len__())
             print(cor_c, '/', val_dataset.__len__(), ' = ', cor_c / val_dataset.__len__())
             print(cor_b, '/', val_dataset.__len__(), ' = ', cor_b / val_dataset.__len__())
