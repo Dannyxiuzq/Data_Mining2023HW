@@ -78,7 +78,7 @@ with torch.no_grad():
     测试过程：
     取image1和image2的两张对应图片，分别计算[pgood1, pbad1]和[pgood2, pbad2], 如果pgood1 > pgood2 则 image1为good, 反之image2为good
     """
-    for i in tqdm(enumerate(image1_dataset),total=len(image1_dataset)):
+    for i in tqdm(range(image1_dataset.__len__()),total=len(image1_dataset)):
         img1 = image1_dataset[i][0].unsqueeze(0).to(device)
         img2 = image2_dataset[i][0].unsqueeze(0).to(device)
         raw_img1 = image1_dataset[i][2]
