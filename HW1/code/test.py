@@ -15,7 +15,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 _, preprocess = clip.load("ViT-B/32", device=device)
 model = torch.load('D:\DataMine\Data_Mining2023\HW1\code\model\model1-9.pkl')
 
-test_data_root = r'D:\DataMine\Data_Mining2023\HW1\Project_Dataset\Selected_Test_Dataset/'
+test_data_root = r'D:\DataMine\Data_Mining2023\HW1\Project_Dataset\Selected_Test_Dataset/' #please change the path to your own path
 path_list = os.listdir(test_data_root)
 all_image1_path = []
 all_image2_path = []
@@ -63,8 +63,7 @@ cor = 0
 
 
 # load已经存好的网络
-#model = torch.load('D:\DataMine\Data_Mining2023\HW1\code\model\model1-1.pkl').to(device)
-proj = torch.load('D:\DataMine\Data_Mining2023\HW1\code\model\proj1-1.pkl').to(device)
+proj = torch.load('D:\DataMine\Data_Mining2023\HW1\code\model\proj1-1.pkl').to(device) #please change the path to your own path
 net = Net(model.encode_image, model.encode_text, proj).to(device)
 # 定义一个保存good和bad的列表
 image_names = []

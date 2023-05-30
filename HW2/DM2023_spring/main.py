@@ -100,7 +100,6 @@ def extract_intention_data(trace_file):
 def train(train_file, model_path):
     trace_data, labels, _, _ = extract_intention_data(train_file)
     sample_num, seq_length, feature_dim = trace_data.shape[0], trace_data.shape[1], trace_data.shape[2]
-    # ave_v = trace_data[:, :, 3].mean(axis=1)    # TODO:平均速度
     le = LabelEncoder()
     le.fit(intention_type)
     trace_labels = le.transform(labels)
@@ -112,7 +111,6 @@ def train(train_file, model_path):
     # todo 标准化有什么作用？标准化处理对所有的模型都有帮助吗？
     shuffled_trace_data = scaler.transform(shuffled_trace_data)
     shuffled_trace_data = shuffled_trace_data.reshape(sample_num, -1)
-    # shuffled_trace_data = np.concatenate((shuffled_trace_data, ave_v.reshape(-1, 1)), axis=-1)  # TODO:平均速度
     # todo 训练集和验证集的统计情况是怎么样的？
     x_train, x_dev, y_train, y_dev = train_test_split(shuffled_trace_data,
                                                       shuffled_trace_labels,
@@ -128,17 +126,10 @@ def train(train_file, model_path):
 
     svm = SVC(C=1, gamma=0.5, kernel='rbf', probability=True)
 
-    # knn = KNeighborsClassifier(n_neighbors=3)
-    # kernels = 1.0 * RBF(length_scale=1.0), 1.0 * DotProduct(sigma_0=1.0) ** 2
-    # gpc = GaussianProcessClassifier(kernel=None, warm_start=True)
-    # gnb = GaussianNB()
     clf = VotingClassifier(
         estimators=[('svm', svm), ('rf', rf_clf)],
-        # estimators=[('svm', svm)],
         voting='soft')
 
-    # clf = KNeighborsClassifier(n_neighbors=10)
-    # clf = BaggingClassifier(base_estimator=knn, n_estimators=3, bootstrap=True, random_state=0)
 
     clf = VotingClassifier(
         estimators=[('svm', svm), ('rf', rf_clf)],
@@ -166,7 +157,6 @@ def test(file_path, model_path, scaler):
     print('Start evaluate...')
     trace_data, labels, formation, interfere = extract_intention_data(file_path)
     sample_num, seq_length, feature_dim = trace_data.shape[0], trace_data.shape[1], trace_data.shape[2]
-    # ave_v = trace_data[:, :, 3].mean(axis=1)    # TODO:平均速度
     le = LabelEncoder()
     le.fit(intention_type)
     trace_labels = le.transform(labels)
@@ -174,7 +164,6 @@ def test(file_path, model_path, scaler):
     trace_data = trace_data.reshape(sample_num * seq_length, -1)
     trace_data = scaler.transform(trace_data)
     trace_data = trace_data.reshape(sample_num, -1)
-    # trace_data = np.concatenate((trace_data, ave_v.reshape(-1, 1)), axis=-1)  # TODO:平均速度
     with open(model_path, 'rb') as fa:
         clf = pickle.load(fa)
     trace_pred = clf.predict(trace_data)
@@ -188,7 +177,6 @@ def test(file_path, model_path, scaler):
     test_accuracy_score = accuracy_score(y_true=trace_labels, y_pred=trace_pred)
     test_f1_score = f1_score(y_true=trace_labels, y_pred=trace_pred, average='macro')
     cm = confusion_matrix(y_true=trace_labels, y_pred=trace_pred)
-    #print(cm)
     # todo 验证集和测试集有什么不同？一般来说，哪个集合上的效果会理想一些？到底应该按哪个指标去选取我们的模型？
     print('Test accuracy = {:.4}, f1_score = {:.4}'.format(test_accuracy_score, test_f1_score))
     # todo 如若效果不理想，有什么改进的思路吗？是否可以分析一下错误的样本，挖掘哪些样本容易被分类器分错？

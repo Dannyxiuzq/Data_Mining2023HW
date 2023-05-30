@@ -18,6 +18,7 @@ from tqdm import tqdm
 """加载clip模型"""
 device = "cuda" if torch.cuda.is_available() else "cpu"
 learning_rate = 1e-5
+
 #please change if you want to train or not to train
 is_train = False
 is_eval = True
@@ -34,17 +35,13 @@ else:
 #please change the path if you want to train
 train_data_root = r'D:\DataMine\Data_Mining2023\HW1\Project_Dataset\Selected_Train_Dataset/'
 path_list = os.listdir(train_data_root)
-# all_good_images_path = []
-# all_bad_images_path = []
 all_image_path_pairs = []
 for path in path_list:
     good_img_path = glob.glob(train_data_root + path + '/good/' + '*.png')
     bad_img_path = glob.glob(train_data_root + path + '/bad/' + '*.png')
     pair_img_path = list(zip(good_img_path, bad_img_path))
-    # all_good_images_path.extend(good_img_path)
-    # all_bad_images_path.extend(bad_img_path)
     all_image_path_pairs.extend(pair_img_path)
-# print(all_image_path_pairs[0])
+
 def get_txt_path(img_path):
     i = 0
     txt_path = ""
@@ -67,8 +64,6 @@ class train_data(Dataset):
     def __init__(self, train_data_root):
         path_list = os.listdir(train_data_root)
         self.prompts = []
-        # self.good_imgs = []
-        # self.bad_imgs = []
         self.good_imgs_path = []
         self.bad_imgs_path = []
         self.raw_prompts = []
@@ -79,17 +74,8 @@ class train_data(Dataset):
 
             good_img_paths = glob.glob(train_data_root + path + '/good/' + '*.png')
             self.good_imgs_path.extend(good_img_paths)
-            # for good_img_path in good_img_paths:
-            #     good_img = Image.open(good_img_path)
-            #     good_img = preprocess(good_img)
-            #     self.good_imgs.append(good_img)
-            #     self.prompts.append(prompt)
             bad_img_paths = glob.glob(train_data_root + path + '/bad/' + '*.png')
             self.bad_imgs_path.extend(bad_img_paths)
-            # for bad_img_path in bad_img_paths:
-            #     bad_img = Image.open(bad_img_path)
-            #     bad_img = preprocess(bad_img)
-            #     self.bad_imgs.append(bad_img)
             self.prompts.extend([prompt]*len(good_img_paths))
             self.raw_prompts.extend([raw_prompt]*len(good_img_paths))
 
@@ -118,16 +104,8 @@ class train_data(Dataset):
 
 
 
-# good_dataset = train_data("good", all_good_images_path)  # good图片数据集
-# bad_dataset = train_data("bad", all_bad_images_path)  # bad图片数据集
-# dataset = good_dataset + bad_dataset  # 形成整个数据集
 dataset = train_data(train_data_root)
-# print(dataset[2])
-# print(len(dataset)) # >> 6040对
-# train_dataset, val_dataset = dataset[:5000], dataset[5000:]
-# train_dataset, val_dataset = train_test_split(dataset, test_size=0, train_size=5000)
 train_dataset, val_dataset, _ = random_split(dataset=dataset, lengths=[4800, 1200, 40],generator=torch.manual_seed(42))#[9664, 2416])
-# train_dataset, val_dataset = random_split(dataset=dataset, lengths=[9664, 2416])  # 训练集和验证集划分 4:1
 batch_size = 16
 train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)  # dataloader batch_size设置的小是因为显存不够
 val_dataloader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
@@ -139,14 +117,10 @@ for name, module in net.named_modules():
 
 # Loss: InfoNCE
 def InfoNCE(pos_embeddings, neg_embeddings, anchor_embeddings, tau: float = 0.8):
-    # pos_embeddings = proj(pos_embeddings)
-    # neg_embeddings = proj(neg_embeddings)
-    # anchor_embeddings = proj(anchor_embeddings)
     pos_pair = torch.exp(F.cosine_similarity(pos_embeddings, anchor_embeddings, dim=-1) / tau)
     neg_pair = torch.exp(F.cosine_similarity(neg_embeddings, anchor_embeddings, dim=-1) / tau)
     return -torch.mean(torch.log(pos_pair / (pos_pair + neg_pair)))
-# loss_img = nn.CrossEntropyLoss().to(device)
-# loss_txt = nn.CrossEntropyLoss().to(device)
+
 
 if is_eval == True and is_train == False:
     model = torch.load('model\model1-9.pkl').to(device)
@@ -170,7 +144,6 @@ for i in range(10):
             good_imgs = good_img.to(device)
             bad_imgs = bad_img.to(device)
             good_imgs_embedding, bad_imgs_embedding, prompts_embedding = net(good_imgs, bad_imgs, prompt_tokens)
-            # total_loss = (loss_img(logits_per_image, ground_truth) + loss_txt(logits_per_text, ground_truth)) / 2
             loss = InfoNCE(good_imgs_embedding, bad_imgs_embedding, prompts_embedding, tau=0.4)
             epoch_loss += loss.item()
             optimizer.zero_grad()
@@ -195,7 +168,6 @@ for i in range(10):
                 print("loss is small, flying!")
         """验证过程"""
         scheduler.step()
-        #print(learning_rate,optimizer.param_groups[0]['lr'])
     if is_eval is True:
         with torch.no_grad():
             cor = 0
@@ -219,37 +191,14 @@ for i in range(10):
                 cor_c += (F.cosine_similarity(good_imgs_embedding, prompts_embedding) >= F.cosine_similarity(
                     bad_imgs_embedding, prompts_embedding)).sum().item()
                 cor_b += (good_ce_score >= bad_ce_score).sum().item()
-                print(cor,cor_c,cor_b)
-                #else:
-                    #print("%s's prompt is wrong" % str(raw_prompt))
-                # if device == "cpu":
-                #     ground_truth = torch.arange(1).long().to(device)
-                # else:
-                #     ground_truth = torch.arange(1, dtype=torch.long, device=device)
-
-                # probs = logits_per_image.softmax(dim=-1).cpu().numpy()
-                # pred = np.argmax(probs)
-                # """预测[good, bad]的概率[pgood, pbad],如果pgood > pbad 则预测为good, 反之为bad"""
-                # if (pred == 0 and label[0] == "good") or (pred == 1 and label[0] == "bad"):
-                #     cor += 1
-                # else:
-                #     print(txt, probs)
+                #可以检测验证集中每批图片的分数
+                #print(cor,cor_c,cor_b)
 
 
-                # if you want to see the score of each image, you can uncomment the following code
-                print('--------------------------------------')
-                #print(good_d_score, bad_d_score)
-                # print(good_ce_score, bad_ce_score)
-                # print('-------------------------------------')
-                # print(F.cosine_similarity(good_imgs_embedding, prompts_embedding),
-                #       F.cosine_similarity(bad_imgs_embedding, prompts_embedding))
-                # print('--------------------------------------')
-                # print(0.95 * F.cosine_similarity(good_imgs_embedding, prompts_embedding) + 0.05 * good_ce_score,
-                #       0.95 * F.cosine_similarity(bad_imgs_embedding, prompts_embedding) + 0.05 * bad_ce_score)
-                # print('--------------------------------------')
             print(cor, '/', val_dataset.__len__(), ' = ', cor / val_dataset.__len__())
             print(cor_c, '/', val_dataset.__len__(), ' = ', cor_c / val_dataset.__len__())
             print(cor_b, '/', val_dataset.__len__(), ' = ', cor_b / val_dataset.__len__())
 
+    #保存模型请取消注释
     # torch.save(model, 'model/net1-%s.pkl' % str(i))# if not want to save model please comment
     # torch.save(proj, 'model/proj1-%s.pkl' % str(i))# if not want to save model please comment

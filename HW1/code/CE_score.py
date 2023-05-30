@@ -36,15 +36,12 @@ def permutation_entropy(windows):
             count[si] += 1
         else:
             count[si] = 1
-    #print(math.factorial(n))
     counts = np.zeros((math.factorial(n),), dtype=int)
     t = 0
     for i in count.values():
         counts[t] = i
         t += 1
     p = counts / len(sorted_data)
-    #print(p)
-    #return (-np.sum(p * np.log2(p + 1e-12))) / np.log2(math.factorial(n))
     return p
 
 
@@ -73,8 +70,6 @@ def statistical_complexity(p):
 
 
 def cal_complexity_entropy(img, window_size=3):
-    #img = img.convert('L')
-    #img_g = np.asarray(img)
     p = permutation_entropy(sliding_window(img, window_size))
     entropy = n_shannon_entropy(p)
     complexity = statistical_complexity(p)
@@ -89,9 +84,6 @@ def cal_complexity_entropy_rgb(img, window_size=3):
     complexity_r, entropy_r = cal_complexity_entropy(img_r, window_size)
     complexity_g, entropy_g = cal_complexity_entropy(img_g, window_size)
     complexity_b, entropy_b = cal_complexity_entropy(img_b, window_size)
-    #p = permutation_entropy(sliding_window(img_g, window_size))
-    #entropy = n_shannon_entropy(p)
-    #complexity = statistical_complexity(p)
     return complexity_r, entropy_r, complexity_g, entropy_g, complexity_b, entropy_b
 
 
@@ -99,9 +91,7 @@ def get_ce_score(knn, svm, img, window_size=3):
     cr, er, cg, eg, cb, eb = cal_complexity_entropy_rgb(img, window_size)
     c = (cr + cg + cb) / 3
     e = (er + eg + eb) / 3
-    #knn_score = knn.predict_proba([[c, e]])
     score = svm.predict_proba([[c, e]])
-    #score = (knn_score + svm_score) / 2
     return score
 
 
