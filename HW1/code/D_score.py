@@ -89,6 +89,7 @@ def get_matrix(prompt):
     return descriptive_matrix, score_matrix
 
 
+
 def get_score(descriptive_matrix, score_matrix, image=None):
     for i in descriptive_matrix.columns:
         for j in descriptive_matrix.index:
