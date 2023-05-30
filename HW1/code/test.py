@@ -94,8 +94,8 @@ with torch.no_grad():
         ce_score_img2 = get_ce_score(knn, svm, raw_img2, 3)[0][1]
         d_score_img1 = get_D_score(raw_img1, txt)
         d_score_img2 = get_D_score(raw_img2, txt)
-        score_img1 = score_img1 * 0.9 + ce_score_img1 * 0.05 + d_score_img1 * 0.05
-        score_img2 = score_img2 * 0.9 + ce_score_img2 * 0.05 + d_score_img2 * 0.05
+        score_img1 = score_img1 * 0.95 + ce_score_img1 * 0.04 + d_score_img1 * 0.01
+        score_img2 = score_img2 * 0.95 + ce_score_img2 * 0.04 + d_score_img2 * 0.01
         img1Better = True if score_img1 > score_img2 else False
         image_names.append(file_name)
         image1s.append('good' if img1Better else 'bad')

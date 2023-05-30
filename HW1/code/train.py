@@ -17,8 +17,10 @@ from model import *
 """加载clip模型"""
 device = "cuda" if torch.cuda.is_available() else "cpu"
 learning_rate = 1e-5
-is_train = False
+#please change if you want to train or not to train
+is_train = True
 is_eval = True
+
 knn = joblib.load('model\knn.plk')
 svm = joblib.load('model\svm.plk')
 model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
@@ -28,6 +30,7 @@ else:
     clip.model.convert_weights(model)
 
 """读取数据集路径"""
+#please change the path if you want to train
 train_data_root = r'D:\DataMine\Data_Mining2023\HW1\Project_Dataset\Selected_Train_Dataset/'
 path_list = os.listdir(train_data_root)
 # all_good_images_path = []
@@ -122,7 +125,7 @@ dataset = train_data(train_data_root)
 # print(len(dataset)) # >> 6040对
 # train_dataset, val_dataset = dataset[:5000], dataset[5000:]
 # train_dataset, val_dataset = train_test_split(dataset, test_size=0, train_size=5000)
-train_dataset, val_dataset, _ = random_split(dataset=dataset, lengths=[5000, 1000, 40],generator=torch.manual_seed(0))#[9664, 2416])
+train_dataset, val_dataset, _ = random_split(dataset=dataset, lengths=[4800, 1200, 40],generator=torch.manual_seed(42))#[9664, 2416])
 # train_dataset, val_dataset = random_split(dataset=dataset, lengths=[9664, 2416])  # 训练集和验证集划分 4:1
 batch_size = 16
 train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)  # dataloader batch_size设置的小是因为显存不够
@@ -146,7 +149,7 @@ def InfoNCE(pos_embeddings, neg_embeddings, anchor_embeddings, tau: float = 0.8)
 
 if is_eval == True and is_train == False:
     model = torch.load('model\model1-9.pkl').to(device)
-    proj = torch.load('model\proj1-0.pkl').to(device)
+    proj = torch.load('model\proj1-1.pkl').to(device)
     net = Net(model.encode_image, model.encode_text, proj).to(device)
 
 
@@ -180,6 +183,7 @@ for i in range(10):
                 clip.model.convert_weights(model)
 
         print('epoch %d, loss: %.3f' % (i + 1, epoch_loss))
+        #test if the loss is too large or too small
         if epoch_loss  >= 200:
             print("loss is larger than 200")
             if epoch_loss  >= 10000:
@@ -229,82 +233,22 @@ for i in range(10):
                 #     cor += 1
                 # else:
                 #     print(txt, probs)
-                print( cor, cor_c, cor_b)
-                print('--------------')
-                # print(good_d_score, bad_d_score)
-                print(good_ce_score, bad_ce_score)
-                print('--------------')
-                print(F.cosine_similarity(good_imgs_embedding, prompts_embedding),
-                      F.cosine_similarity(bad_imgs_embedding, prompts_embedding))
-                print('--------------')
-                print(0.95 * F.cosine_similarity(good_imgs_embedding, prompts_embedding) + 0.05 * good_ce_score,
-                      0.95 * F.cosine_similarity(bad_imgs_embedding, prompts_embedding) + 0.05 * bad_ce_score)
-                print('--------------')
+
+
+                # if you want to see the score of each image, you can uncomment the following code
+                # print('--------------------------------------')
+                # # print(good_d_score, bad_d_score)
+                # print(good_ce_score, bad_ce_score)
+                # print('--------------------------------------')
+                # print(F.cosine_similarity(good_imgs_embedding, prompts_embedding),
+                #       F.cosine_similarity(bad_imgs_embedding, prompts_embedding))
+                # print('--------------------------------------')
+                # print(0.95 * F.cosine_similarity(good_imgs_embedding, prompts_embedding) + 0.05 * good_ce_score,
+                #       0.95 * F.cosine_similarity(bad_imgs_embedding, prompts_embedding) + 0.05 * bad_ce_score)
+                # print('--------------------------------------')
             print(cor, '/', val_dataset.__len__(), ' = ', cor / val_dataset.__len__())
             print(cor_c, '/', val_dataset.__len__(), ' = ', cor_c / val_dataset.__len__())
             print(cor_b, '/', val_dataset.__len__(), ' = ', cor_b / val_dataset.__len__())
 
-    #torch.save(model, 'model/net1-%s.pkl' % str(i))# if not want to save model please comment
-    #torch.save(proj, 'model/proj1-%s.pkl' % str(i))# if not want to save model please comment
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# for i in range(10):
-
-#     """训练过程"""
-#     for batch, (img, txt, label, prompt) in enumerate(train_dataloader):
-#         print('.', end='')
-#         txts = clip.tokenize(txt).to(device)
-#         imgs = img.to(device)
-#         logits_per_image, logits_per_text = model(imgs, txts)
-
-#         if device == "cpu":
-#             ground_truth = torch.arange(1).long().to(device)
-#         else:
-#             ground_truth = torch.arange(1, dtype=torch.long, device=device)
-
-#         total_loss = (loss_img(logits_per_image, ground_truth) + loss_txt(logits_per_text, ground_truth)) / 2
-#         optimizer.zero_grad()
-#         total_loss.backward()
-#         if device == "cpu":
-#             optimizer.step()
-#         else:
-#             convert_models_to_fp32(model)
-#             optimizer.step()
-#             clip.model.convert_weights(model)
-
-#     print('[%d] loss: %.3f' % (i + 1, total_loss))
-
-#     """验证过程"""
-#     with torch.no_grad():
-#         cor = 0
-#         for batch, (img, txt, label, prompt) in enumerate(val_dataloader):
-#             # text = clip.tokenize(["a good photo of " + prompt[0], "a bad photo of " + prompt[0]]).to(device)
-#             # text = clip.tokenize([prompt[0], "other things"]).to(device)
-#             # text = clip.tokenize(["a photo of " + prompt[0], "a photo without " + prompt[0]]).to(device)
-#             # text = clip.tokenize(["a good photo of " + prompt[0] + "without other things", "a mess photo of " + prompt[0] + "with other things"]).to(device)
-#             text = clip.tokenize(["a beautiful and concise photo of " + prompt[0], "a mussy photo of " + prompt[0]]).to(device)
-#             image = img.to(device)
-#             logits_per_image, logits_per_text = model(image, text)
-#             probs = logits_per_image.softmax(dim=-1).cpu().numpy()
-#             pred = np.argmax(probs)
-#             """预测[good, bad]的概率[pgood, pbad],如果pgood > pbad 则预测为good, 反之为bad"""
-#             if (pred == 0 and label[0] == "good") or (pred == 1 and label[0] == "bad"):
-#                 cor += 1
-#             else:
-#                 print(txt, probs)
-#         print(cor, '/', val_dataset.__len__(), ' = ', cor / val_dataset.__len__())
-
-#     torch.save(model, 'model/model1-%s.pkl' % str(i))
+    # torch.save(model, 'model/net1-%s.pkl' % str(i))# if not want to save model please comment
+    # torch.save(proj, 'model/proj1-%s.pkl' % str(i))# if not want to save model please comment
