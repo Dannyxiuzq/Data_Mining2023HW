@@ -7,18 +7,12 @@ from TraceLoader import ObjectTrace
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
-from sklearn.ensemble import RandomForestClassifier, BaggingClassifier, VotingClassifier
+from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
-from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
-from sklearn.gaussian_process import GaussianProcessClassifier
-from sklearn.naive_bayes import GaussianNB
-import xgboost as xgb
-from sklearn.gaussian_process.kernels import RBF, DotProduct
 import pickle
 import os
 from mpl_toolkits import mplot3d
-import numpy as np
 import matplotlib.pyplot as plt
 from utils import *
 from pylab import mpl
@@ -27,12 +21,9 @@ random_seed = 2023
 np.random.seed(random_seed)
 formation_l = {'单机': 0, '横队': 1, '三角': 2, '4': 3, '3': 4, '2': 5, '7': 6, '1': 7, '6': 8, '5': 9}
 count = {'打击': 0, '干扰': 0, '诱扰': 0, '侦察': 0, '指挥': 0}
-count1 = {'打击': {'打击': 0, '干扰': 0, '诱扰': 0, '侦察': 0, '指挥': 0},
-          '干扰': {'打击': 0, '干扰': 0, '诱扰': 0, '侦察': 0, '指挥': 0},
-          '诱扰': {'打击': 0, '干扰': 0, '诱扰': 0, '侦察': 0, '指挥': 0},
-          '侦察': {'打击': 0, '干扰': 0, '诱扰': 0, '侦察': 0, '指挥': 0},
-          '指挥': {'打击': 0, '干扰': 0, '诱扰': 0, '侦察': 0, '指挥': 0}}
 i_map = {2: '打击', 0: '侦察', 3: '指挥', 4: '诱扰', 1: '干扰'}
+
+
 def extract_intention_data(trace_file):
     traceModel = ObjectTrace()
     with open(trace_file, 'r', encoding='utf-8') as fa:
@@ -56,18 +47,13 @@ def extract_intention_data(trace_file):
     formation = []
     interfere = []
     seq_length = 5
-    feature_dim = 4
+    feature_dim = 12
     p = 0
     hist_trace_dict = traceModel.hist_trace_dict
     all_t = []
     for Id, hist_trace in hist_trace_dict.items():
         all_t += hist_trace['xyz']
         #plot_3d_scatter(hist_trace['xyz'], hist_trace['Intention'], Id)
-        #print(hist_trace['Intention'], hist_trace['Formation'], hist_trace['Wingman'], hist_trace['Group'], hist_trace['Model'], hist_trace['Points_num'])
-        if hist_trace['Interfere'][0] == True:
-            #print(hist_trace['Intention'])
-            pass
-        #print(hist_trace['Vel'])
         p += hist_trace['Points_num']
         trace_length = len(hist_trace['Timestamp'])
         trace_intention = hist_trace['Intention'][0]
@@ -78,9 +64,8 @@ def extract_intention_data(trace_file):
         d_h = hist_trace['Delta_h']
         d_v = hist_trace['Delta_v']
         d_a = hist_trace['Delta_att']
-        #print(trace_length)
+        grp = hist_trace['Group']
         for idx in range(trace_length):
-            #print(trace_length)
             if idx == trace_length - 5:
                 break
             start = idx
@@ -88,14 +73,14 @@ def extract_intention_data(trace_file):
             features = []
             for idy in range(start, end):
                 # todo 能否挖掘出更多特征？哪些是有用特征，哪些是无用的？
-                feature = xyz[idy] + [speed[idy]] + att[idy] + vel[idy] + [d_v[idy]]# + [formation_l[hist_trace['Formation'][0]]]
+                feature = xyz[idy] + [speed[idy]] + att[idy] + vel[idy] + [d_v[idy]] + [grp]# + [formation_l[hist_trace['Formation'][0]]]
                 features.append(feature)
 
             # todo 这一步是做什么用？除了padding以外，还能怎么做？
             if end - start < seq_length:
                 break
-                for _ in range(seq_length - (end - start)):
-                    features.append([0] * feature_dim)
+                # for _ in range(seq_length - (end - start)):
+                #     features.append([0] * feature_dim)
 
             trace_data.append(features)
             labels.append([trace_intention])
@@ -105,20 +90,13 @@ def extract_intention_data(trace_file):
     trace_data = np.array(trace_data)
     labels = np.array(labels)
     labels = labels.squeeze()
-    print(labels.shape)
-    print(trace_data.shape)
-    print(p)
-    #plot_3d_scatter(all_t, 'all', 'all')
-    for i in labels:
-        count[i] += 1
-    print(count)
     return trace_data, labels, formation, interfere
 
 
 def train(train_file, model_path):
     trace_data, labels, _, _ = extract_intention_data(train_file)
-    #print(trace_data, labels)
     sample_num, seq_length, feature_dim = trace_data.shape[0], trace_data.shape[1], trace_data.shape[2]
+    # ave_v = trace_data[:, :, 3].mean(axis=1)    # TODO:平均速度
     le = LabelEncoder()
     le.fit(intention_type)
     trace_labels = le.transform(labels)
@@ -130,42 +108,27 @@ def train(train_file, model_path):
     # todo 标准化有什么作用？标准化处理对所有的模型都有帮助吗？
     shuffled_trace_data = scaler.transform(shuffled_trace_data)
     shuffled_trace_data = shuffled_trace_data.reshape(sample_num, -1)
+    # shuffled_trace_data = np.concatenate((shuffled_trace_data, ave_v.reshape(-1, 1)), axis=-1)  # TODO:平均速度
     # todo 训练集和验证集的统计情况是怎么样的？
     x_train, x_dev, y_train, y_dev = train_test_split(shuffled_trace_data,
                                                       shuffled_trace_labels,
                                                       test_size=0.2,
                                                       random_state=random_seed)
     # todo 对于一个模型，如何寻找最优参数设置？
-    model=[]
-    rf_clf = RandomForestClassifier(n_estimators=20,
+    rf_clf = RandomForestClassifier(n_estimators=20,   # 20
                                  criterion='gini',
-                                 max_depth=3,
-                                 min_samples_split=2,
+                                 max_depth=3,   # 3
+                                 min_samples_split=2, # 2
                                  bootstrap=True,
                                  random_state=0)
-    model.append(('rf', rf_clf))
-    svm = SVC(C=1, gamma=0.17, kernel='rbf', probability=True)
-    model.append(('svm', svm))
-    knn = KNeighborsClassifier(n_neighbors=3)
-    #kernels = 1.0 * RBF(length_scale=1.0), 1.0 * DotProduct(sigma_0=1.0) ** 2
-    #gpc = GaussianProcessClassifier(kernel=None, warm_start=True)
-    # XGBT_classifier = xgb.XGBClassifier(
-    #     max_depth=4,
-    #     n_estimators=30,
-    #     learning_rate=0.25,
-    #     gamma=0.3,
-    #     objective='multi:softmax',
-    # )
-    # model.append(('XGBT', XGBT_classifier))
+
+    svm = SVC(C=1, gamma=0.5, kernel='rbf', probability=True)
     clf = VotingClassifier(
-        estimators=model,
+        estimators=[('svm', svm), ('rf', rf_clf)],
         voting='soft')
 
-    #clf = KNeighborsClassifier(n_neighbors=10)
-    #clf = BaggingClassifier(base_estimator=knn, n_estimators=3, bootstrap=True, random_state=0)
     clf.fit(x_train, y_train)
     y_train_predict = clf.predict(x_train)
-    #print(y_train_predict)
     y_dev_predict = clf.predict(x_dev)
     train_accuracy_score = accuracy_score(y_true=y_train, y_pred=y_train_predict)
     train_f1_score = f1_score(y_true=y_train, y_pred=y_train_predict, average='macro')
@@ -186,44 +149,29 @@ def test(file_path, model_path, scaler):
     print('Start evaluate...')
     trace_data, labels, formation, interfere = extract_intention_data(file_path)
     sample_num, seq_length, feature_dim = trace_data.shape[0], trace_data.shape[1], trace_data.shape[2]
+    # ave_v = trace_data[:, :, 3].mean(axis=1)    # TODO:平均速度
     le = LabelEncoder()
     le.fit(intention_type)
     trace_labels = le.transform(labels)
-    '''
-    for i in range(len(labels)):
-        if labels[i] == '打击': #2#'干扰':1
-            print('*', trace_labels[i])
-        if labels[i] == '侦察': #'诱扰':4
-            print('**', trace_labels[i])
-        #print(labels[i], trace_labels[i])
-    '''
     # todo 测试的时候是否需要shuffle?
     trace_data = trace_data.reshape(sample_num * seq_length, -1)
     trace_data = scaler.transform(trace_data)
     trace_data = trace_data.reshape(sample_num, -1)
+    # trace_data = np.concatenate((trace_data, ave_v.reshape(-1, 1)), axis=-1)  # TODO:平均速度
     with open(model_path, 'rb') as fa:
         clf = pickle.load(fa)
     trace_pred = clf.predict(trace_data)
-    #print(formation)
 
     for i in range(len(trace_pred)):
-
         if interfere[i] == True:
             trace_pred[i] = 1
         if formation[i] == '横队':
             trace_pred[i] = 4
 
-
-
-    for i in range(len(trace_pred)):
-        if trace_pred[i] != trace_labels[i]:
-            #print(trace_data[i], labels[i], i_map[trace_pred[i]])
-            pass
-
     test_accuracy_score = accuracy_score(y_true=trace_labels, y_pred=trace_pred)
     test_f1_score = f1_score(y_true=trace_labels, y_pred=trace_pred, average='macro')
     cm = confusion_matrix(y_true=trace_labels, y_pred=trace_pred)
-    print(cm)
+    #print(cm)
     # todo 验证集和测试集有什么不同？一般来说，哪个集合上的效果会理想一些？到底应该按哪个指标去选取我们的模型？
     print('Test accuracy = {:.4}, f1_score = {:.4}'.format(test_accuracy_score, test_f1_score))
     # todo 如若效果不理想，有什么改进的思路吗？是否可以分析一下错误的样本，挖掘哪些样本容易被分类器分错？
@@ -246,6 +194,7 @@ def plot_3d_scatter(arr, label, t):
     plt.title(label)
     #plt.show()
     plt.savefig(t + '.png')
+
 
 if __name__ == '__main__':
     train_file_path = 'dataset/BekaaValley_train.csv'
