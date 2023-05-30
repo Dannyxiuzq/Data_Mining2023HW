@@ -13,7 +13,6 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.naive_bayes import GaussianNB
-import xgboost as xgb
 from sklearn.gaussian_process.kernels import RBF, DotProduct
 import pickle
 import os
@@ -56,7 +55,7 @@ def extract_intention_data(trace_file):
     formation = []
     interfere = []
     seq_length = 5
-    feature_dim = 4
+    feature_dim = 12
     p = 0
     hist_trace_dict = traceModel.hist_trace_dict
     all_t = []
@@ -78,6 +77,7 @@ def extract_intention_data(trace_file):
         d_h = hist_trace['Delta_h']
         d_v = hist_trace['Delta_v']
         d_a = hist_trace['Delta_att']
+        grp = hist_trace['Group']
         #print(trace_length)
         for idx in range(trace_length):
             #print(trace_length)
@@ -88,14 +88,14 @@ def extract_intention_data(trace_file):
             features = []
             for idy in range(start, end):
                 # todo 能否挖掘出更多特征？哪些是有用特征，哪些是无用的？
-                feature = xyz[idy] + [speed[idy]] + att[idy] + vel[idy] + [d_v[idy]]# + [formation_l[hist_trace['Formation'][0]]]
+                feature = xyz[idy] + [speed[idy]] + att[idy] + vel[idy] + [d_v[idy]] + [grp]# + [formation_l[hist_trace['Formation'][0]]]
                 features.append(feature)
 
             # todo 这一步是做什么用？除了padding以外，还能怎么做？
             if end - start < seq_length:
                 break
-                for _ in range(seq_length - (end - start)):
-                    features.append([0] * feature_dim)
+                # for _ in range(seq_length - (end - start)):
+                #     features.append([0] * feature_dim)
 
             trace_data.append(features)
             labels.append([trace_intention])
@@ -119,6 +119,7 @@ def train(train_file, model_path):
     trace_data, labels, _, _ = extract_intention_data(train_file)
     #print(trace_data, labels)
     sample_num, seq_length, feature_dim = trace_data.shape[0], trace_data.shape[1], trace_data.shape[2]
+    # ave_v = trace_data[:, :, 3].mean(axis=1)    # TODO:平均速度
     le = LabelEncoder()
     le.fit(intention_type)
     trace_labels = le.transform(labels)
@@ -130,39 +131,32 @@ def train(train_file, model_path):
     # todo 标准化有什么作用？标准化处理对所有的模型都有帮助吗？
     shuffled_trace_data = scaler.transform(shuffled_trace_data)
     shuffled_trace_data = shuffled_trace_data.reshape(sample_num, -1)
+    # shuffled_trace_data = np.concatenate((shuffled_trace_data, ave_v.reshape(-1, 1)), axis=-1)  # TODO:平均速度
     # todo 训练集和验证集的统计情况是怎么样的？
     x_train, x_dev, y_train, y_dev = train_test_split(shuffled_trace_data,
                                                       shuffled_trace_labels,
                                                       test_size=0.2,
                                                       random_state=random_seed)
     # todo 对于一个模型，如何寻找最优参数设置？
-    model=[]
-    rf_clf = RandomForestClassifier(n_estimators=20,
+    rf_clf = RandomForestClassifier(n_estimators=20,   # 20
                                  criterion='gini',
-                                 max_depth=3,
-                                 min_samples_split=2,
+                                 max_depth=3,   # 3
+                                 min_samples_split=2, # 2
                                  bootstrap=True,
                                  random_state=0)
-    model.append(('rf', rf_clf))
-    svm = SVC(C=1, gamma=0.17, kernel='rbf', probability=True)
-    model.append(('svm', svm))
-    knn = KNeighborsClassifier(n_neighbors=3)
-    #kernels = 1.0 * RBF(length_scale=1.0), 1.0 * DotProduct(sigma_0=1.0) ** 2
-    #gpc = GaussianProcessClassifier(kernel=None, warm_start=True)
-    # XGBT_classifier = xgb.XGBClassifier(
-    #     max_depth=4,
-    #     n_estimators=30,
-    #     learning_rate=0.25,
-    #     gamma=0.3,
-    #     objective='multi:softmax',
-    # )
-    # model.append(('XGBT', XGBT_classifier))
+
+    svm = SVC(C=1, gamma=0.5, kernel='rbf', probability=True)
+    # knn = KNeighborsClassifier(n_neighbors=3)
+    # kernels = 1.0 * RBF(length_scale=1.0), 1.0 * DotProduct(sigma_0=1.0) ** 2
+    # gpc = GaussianProcessClassifier(kernel=None, warm_start=True)
+    # gnb = GaussianNB()
     clf = VotingClassifier(
-        estimators=model,
+        estimators=[('svm', svm), ('rf', rf_clf)],
+        # estimators=[('svm', svm)],
         voting='soft')
 
-    #clf = KNeighborsClassifier(n_neighbors=10)
-    #clf = BaggingClassifier(base_estimator=knn, n_estimators=3, bootstrap=True, random_state=0)
+    # clf = KNeighborsClassifier(n_neighbors=10)
+    # clf = BaggingClassifier(base_estimator=knn, n_estimators=3, bootstrap=True, random_state=0)
     clf.fit(x_train, y_train)
     y_train_predict = clf.predict(x_train)
     #print(y_train_predict)
@@ -186,6 +180,7 @@ def test(file_path, model_path, scaler):
     print('Start evaluate...')
     trace_data, labels, formation, interfere = extract_intention_data(file_path)
     sample_num, seq_length, feature_dim = trace_data.shape[0], trace_data.shape[1], trace_data.shape[2]
+    # ave_v = trace_data[:, :, 3].mean(axis=1)    # TODO:平均速度
     le = LabelEncoder()
     le.fit(intention_type)
     trace_labels = le.transform(labels)
@@ -201,6 +196,7 @@ def test(file_path, model_path, scaler):
     trace_data = trace_data.reshape(sample_num * seq_length, -1)
     trace_data = scaler.transform(trace_data)
     trace_data = trace_data.reshape(sample_num, -1)
+    # trace_data = np.concatenate((trace_data, ave_v.reshape(-1, 1)), axis=-1)  # TODO:平均速度
     with open(model_path, 'rb') as fa:
         clf = pickle.load(fa)
     trace_pred = clf.predict(trace_data)

@@ -14,11 +14,12 @@ from sklearn.model_selection import train_test_split
 import torch.nn.functional as F
 from torch.optim import lr_scheduler
 from model import *
+from tqdm import tqdm
 """加载clip模型"""
 device = "cuda" if torch.cuda.is_available() else "cpu"
 learning_rate = 1e-5
 #please change if you want to train or not to train
-is_train = True
+is_train = False
 is_eval = True
 
 knn = joblib.load('model\knn.plk')
@@ -200,7 +201,7 @@ for i in range(10):
             cor = 0
             cor_c = 0
             cor_b = 0
-            for batch, (good_img, bad_img, prompt, raw_prompt, good_img_path, bad_img_path) in enumerate(val_dataloader):
+            for batch, (good_img, bad_img, prompt, raw_prompt, good_img_path, bad_img_path) in tqdm(enumerate(val_dataloader), total=len(val_dataloader)):
 
                 prompt_tokens = clip.tokenize(prompt).to(device)
                 good_imgs = good_img.to(device)
@@ -236,10 +237,10 @@ for i in range(10):
 
 
                 # if you want to see the score of each image, you can uncomment the following code
-                # print('--------------------------------------')
-                # # print(good_d_score, bad_d_score)
+                print('--------------------------------------')
+                #print(good_d_score, bad_d_score)
                 # print(good_ce_score, bad_ce_score)
-                # print('--------------------------------------')
+                # print('-------------------------------------')
                 # print(F.cosine_similarity(good_imgs_embedding, prompts_embedding),
                 #       F.cosine_similarity(bad_imgs_embedding, prompts_embedding))
                 # print('--------------------------------------')
